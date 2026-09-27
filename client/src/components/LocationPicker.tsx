@@ -91,6 +91,7 @@ async function lookupPin(pin: string): Promise<SensedPlace | null> {
             resolve({
               latitude: location.lat(),
               longitude: location.lng(),
+              address: hit?.formatted_address || "",
               village: component(parts, "locality", "administrative_area_level_3"),
               district: component(parts, "administrative_area_level_2"),
               state: component(parts, "administrative_area_level_1"),
