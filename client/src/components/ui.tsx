@@ -60,7 +60,7 @@ export function FileInput({ id, accept, multiple, onChange }: { id?: string; acc
       <input ref={inputRef} id={id} type="file" accept={accept} multiple={multiple} className="sr-only" onChange={(event) => {
         const files = event.target.files;
         const file = files?.[0] || null;
-        setLabel(!files?.length ? "No file chosen" : files.length > 1 ? `${files.length} files chosen` : file.name);
+        setLabel(!files?.length ? "No file chosen" : files.length > 1 ? `${files.length} files chosen` : file?.name || "No file chosen");
         onChange?.(file, files);
       }} />
     </div>
