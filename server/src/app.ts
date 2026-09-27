@@ -1,0 +1,24 @@
+import express from "express";
+import cors from "cors";
+import helmet from "helmet";
+import cookieParser from "cookie-parser";
+import rateLimit from "express-rate-limit";
+import path from "node:path";
+import { env } from "./config/env.js";
+import { router } from "./routes/index.js";
+import { errorHandler } from "./middleware/error.js";
+import { uploadErrorHandler } from "./middleware/upload.js";
+
+export const app = express();
+app.set("trust proxy", 1);
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+app.use(cors({ origin: env.clientUrl.split(",").map((v) => v.trim()), credentials: true }));
+app.use(express.json({ limit: "2mb" }));
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 400, standardHeaders: true, legacyHeaders: false }));
+app.use("/api", router);
+app.use((_req, res) => res.status(404).json({ success: false, message: "The requested resource was not found" }));
+app.use(uploadErrorHandler);
+app.use(errorHandler);

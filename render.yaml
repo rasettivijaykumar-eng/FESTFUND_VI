@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: festfund-api
+    runtime: node
+    rootDir: server
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CLIENT_URL
+        value: https://festfund-web.onrender.com
+
+  - type: web
+    name: festfund-web
+    runtime: static
+    rootDir: client
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://festfund-api.onrender.com/api
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
