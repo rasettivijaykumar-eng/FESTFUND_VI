@@ -566,15 +566,21 @@ export function GalleryPage({ fixedKind }: { fixedKind?: "photo" | "video" }) {
         <div className="columns-1 gap-3 sm:columns-2 lg:columns-3">
           {query.data.map((item) => (
             <article key={item._id} className="mb-3 break-inside-avoid overflow-hidden rounded-3xl bg-white/5">
-              <button className="block w-full" onClick={() => setActive(item)}>{item.kind === "video" ? <video src={item.url} className="w-full" /> : <img src={item.url} alt={item.title} className="w-full transition duration-300 hover:scale-[1.02]" />}</button>
+              <button className="block w-full" onClick={() => setActive(item)}>{item.kind === "video" ? <video src={item.url} className="w-full" /> : <GalleryPhoto key={item._id} src={item.url} alt={item.title} className="w-full transition duration-300 hover:scale-[1.02]" />}</button>
               <div className="flex items-center justify-between p-3 text-sm"><span>{item.title}</span><button className="underline" onClick={async () => { await api.delete(`/gallery/${item._id}`); await client.invalidateQueries({ queryKey: ["gallery"] }); }}>Delete</button></div>
             </article>
           ))}
         </div>
       )}
-      {active && <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90 p-4" role="dialog" aria-label={active.title}>{active.kind === "video" ? <video src={active.url} controls autoPlay className="max-h-[75vh]" /> : <img src={active.url} alt={active.title} className="max-h-[75vh]" />}<div className="mt-4 flex gap-4 text-sm"><a href={`${api.defaults.baseURL}/gallery/${active._id}/download`}>Download original</a><button onClick={() => setActive(null)}>Close</button></div></div>}
+      {active && <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90 p-4" role="dialog" aria-label={active.title}>{active.kind === "video" ? <video src={active.url} controls autoPlay className="max-h-[75vh]" /> : <GalleryPhoto key={active._id} src={active.url} alt={active.title} className="max-h-[75vh]" />}<div className="mt-4 flex gap-4 text-sm"><a href={`${api.defaults.baseURL}/gallery/${active._id}/download`}>Download original</a><button onClick={() => setActive(null)}>Close</button></div></div>}
     </div>
   );
+}
+
+function GalleryPhoto({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  const [unavailable, setUnavailable] = useState(false);
+  if (unavailable) return <div className={`flex min-h-40 items-center justify-center bg-white/5 p-6 text-center text-sm text-white/60 ${className || ""}`}>Image file unavailable. Re-upload to restore it.</div>;
+  return <img src={src} alt={alt} className={className} onError={() => setUnavailable(true)} />;
 }
 
 export function NotesPage() {
