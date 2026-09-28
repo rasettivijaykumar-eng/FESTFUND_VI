@@ -8,6 +8,8 @@ const schema = new mongoose.Schema(
     festId: { type: String, required: true, index: true },
     festivalName: { type: String, required: true },
     donorName: { type: String, required: true },
+    adminName: { type: String, default: "" },
+    adminMobile: { type: String, default: "" },
     amount: { type: Number, required: true },
     contributionDate: { type: Date, required: true },
     category: { type: String, default: "" },

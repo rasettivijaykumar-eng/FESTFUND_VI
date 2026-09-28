@@ -170,7 +170,24 @@ export type Ad = {
   status: "active" | "paused";
   views: number;
   isFree: boolean;
-  vendor?: { businessName?: string; category?: string; logoUrl?: string; district?: string; village?: string };
+  validFrom?: string;
+  createdAt?: string;
+  vendor?: {
+    businessName?: string;
+    ownerName?: string;
+    category?: string;
+    logoUrl?: string;
+    district?: string;
+    village?: string;
+    state?: string;
+    pincode?: string;
+    address?: string;
+    description?: string;
+    contactMobile?: string;
+    businessHours?: string;
+    images?: { url: string; originalName?: string }[];
+    products?: VendorProduct[];
+  };
 };
 
 export type Analytics = {

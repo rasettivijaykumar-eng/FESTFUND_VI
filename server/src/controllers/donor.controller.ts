@@ -26,7 +26,10 @@ export const listDonors = asyncHandler(async (req, res) => {
   await loadFestivalForActor(req, festId, "read");
   const q = String(req.query.q || "");
   const filter: Record<string, unknown> = { festId };
-  if (q) filter.name = new RegExp(escapeRegex(q), "i");
+  if (q) {
+    const search = new RegExp(escapeRegex(q), "i");
+    filter.$or = [{ name: search }, { mobile: search }, { category: search }];
+  }
   if (req.query.min) filter.amount = { ...(filter.amount as object), $gte: Number(req.query.min) };
   if (req.query.max) filter.amount = { ...(filter.amount as object), $lte: Number(req.query.max) };
   if (req.query.from || req.query.to) {

@@ -126,12 +126,14 @@ export const nearbyVendors = asyncHandler(async (req, res) => {
       return {
         _id: vendor._id,
         businessName: vendor.businessName,
+        ownerName: vendor.ownerName,
         category: vendor.category,
         description: vendor.description,
         address: vendor.address,
         village: vendor.village,
         district: vendor.district,
         state: vendor.state,
+        pincode: vendor.pincode,
         latitude: vendor.latitude,
         longitude: vendor.longitude,
         logoUrl: vendor.logoUrl,
@@ -163,7 +165,7 @@ export const publicAds = asyncHandler(async (_req, res) => {
   const ads = await Advertisement.find({
     status: "active",
     $or: [{ validUntil: { $exists: false } }, { validUntil: null }, { validUntil: { $gte: now } }],
-  }).populate("vendor", "businessName category logoUrl district village");
+  }).populate("vendor", "businessName ownerName category logoUrl district village state pincode address description contactMobile businessHours images products");
   res.json({ success: true, data: ads });
 });
 

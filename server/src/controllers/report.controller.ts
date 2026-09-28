@@ -38,6 +38,8 @@ export const createReceipt = asyncHandler(async (req, res) => {
       festId: festival.festId,
       festivalName: festival.name,
       donorName: donor.name,
+      adminName: festival.contactName,
+      adminMobile: festival.contactMobile,
       amount: donor.amount,
       contributionDate: donor.date,
       category: donor.category,
@@ -49,11 +51,11 @@ export const createReceipt = asyncHandler(async (req, res) => {
 export const receiptPdf = asyncHandler(async (req, res) => {
   const receipt = await Receipt.findById(req.params.id);
   if (!receipt) throw new ApiError(404, "Receipt not found");
-  await loadFestivalForActor(req, receipt.festId, "read");
-  sendReceiptPdf(res, receipt, req.query.inline === "1");
+  const festival = await loadFestivalForActor(req, receipt.festId, "read");
+  sendReceiptPdf(res, { ...receipt.toObject(), adminName: receipt.adminName || festival.contactName, adminMobile: receipt.adminMobile || festival.contactMobile }, req.query.inline === "1");
 });
 
-function sendReceiptPdf(res: import("express").Response, receipt: { receiptNo: string; festivalName: string; festId: string; donorName: string; amount: number; category?: string; contributionDate: Date }, inline: boolean) {
+function sendReceiptPdf(res: import("express").Response, receipt: { receiptNo: string; festivalName: string; festId: string; donorName: string; amount: number; category?: string; contributionDate: Date; adminName?: string; adminMobile?: string }, inline: boolean) {
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `${inline ? "inline" : "attachment"}; filename="${receipt.receiptNo}.pdf"`);
   const doc = new PDFDocument({ size: "A4", margin: 48 });
@@ -81,6 +83,13 @@ function sendReceiptPdf(res: import("express").Response, receipt: { receiptNo: s
     doc.moveDown(0.4);
     doc.fillColor("#1A0D05");
   }
+  if (receipt.adminName || receipt.adminMobile) {
+    doc.moveDown(0.6);
+    doc.font("Helvetica-Bold").text("Festival admin contact");
+    doc.font("Helvetica").fillColor("#333").text(receipt.adminName || "Festival administrator");
+    if (receipt.adminMobile) doc.text(`Mobile: ${receipt.adminMobile}`, { link: `tel:${receipt.adminMobile}` });
+    doc.fillColor("#1A0D05");
+  }
   doc.moveDown(1.2);
   doc.fontSize(10).fillColor("#666").text("This receipt records a contribution entered by the festival admin. FestFund does not collect online donations.");
   doc.end();
@@ -102,12 +111,14 @@ export const publicDonorReceipt = asyncHandler(async (req, res) => {
       festId: festival.festId,
       festivalName: festival.name,
       donorName: donor.name,
+      adminName: festival.contactName,
+      adminMobile: festival.contactMobile,
       amount: donor.amount,
       contributionDate: donor.date,
       category: donor.category,
     });
   }
-  sendReceiptPdf(res, receipt, false);
+  sendReceiptPdf(res, { ...receipt.toObject(), adminName: receipt.adminName || festival.contactName, adminMobile: receipt.adminMobile || festival.contactMobile }, false);
 });
 
 export const publicFestivalReport = asyncHandler(async (req, res) => {

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { MapPin } from "lucide-react";
 import { Logo } from "../components/Logo";
 import { AdCarousel } from "./AdCarousel";
-import { AnimatedNumber, Badge, Button, EmptyState, Skeleton, Tabs } from "../components/ui";
+import { AnimatedNumber, Badge, Button, EmptyState, SearchBar, Skeleton, Tabs, useDebounced } from "../components/ui";
 import { api, errorMessage, inr, prettyDate, type Ad, type Donor, type Expense, type FestEvent, type GalleryItem } from "../lib/api";
 import { useToast } from "../context/AppState";
 
@@ -37,6 +37,8 @@ export default function FestivalPublic() {
   const { festId = "" } = useParams();
   const { push } = useToast();
   const [tab, setTab] = useState("overview");
+  const [donorSearch, setDonorSearch] = useState("");
+  const [expenseSearch, setExpenseSearch] = useState("");
   const [lightbox, setLightbox] = useState<GalleryItem | null>(null);
   const query = useQuery({
     queryKey: ["public-festival", festId],
@@ -45,10 +47,12 @@ export default function FestivalPublic() {
   const nearby = useQuery({
     queryKey: ["nearby", festId],
     enabled: Boolean(query.data),
-    queryFn: async () => (await api.get("/public/vendors/nearby", { params: { festId, radius: 20 } })).data as { data: { _id: string; businessName: string; category: string; distanceKm: number | null; village: string; district: string; logoUrl?: string; contactMobile?: string; description?: string; images?: { url: string }[]; products?: { _id: string; name: string; price: number; imageUrl?: string }[] }[]; meta: { mapsConfigured: boolean } },
+    queryFn: async () => (await api.get("/public/vendors/nearby", { params: { festId, radius: 20 } })).data as { data: { _id: string; businessName: string; ownerName: string; category: string; distanceKm: number | null; village: string; district: string; state?: string; pincode?: string; address?: string; businessHours?: string; logoUrl?: string; contactMobile?: string; description?: string; images?: { url: string; originalName?: string }[]; products?: { _id: string; name: string; price: number; imageUrl?: string }[] }[]; meta: { mapsConfigured: boolean } },
   });
   const ads = useQuery({ queryKey: ["public-ads"], queryFn: async () => (await api.get("/public/advertisements")).data.data as Ad[] });
   const [vendorId, setVendorId] = useState<string | null>(null);
+  const donorQuery = useDebounced(donorSearch);
+  const expenseQuery = useDebounced(expenseSearch);
 
   if (query.isLoading) return <div className="min-h-screen bg-[#0d0805] p-6"><Skeleton className="h-72" /><div className="mt-4 grid gap-3 md:grid-cols-3"><Skeleton className="h-28" /><Skeleton className="h-28" /><Skeleton className="h-28" /></div></div>;
   if (query.isError || !query.data) {
@@ -75,6 +79,8 @@ export default function FestivalPublic() {
     } catch (error) { push("error", errorMessage(error)); }
   }
   const vendor = nearby.data?.data.find((v) => v._id === vendorId);
+  const visibleDonors = query.data.donors.filter((donor) => `${donor.name} ${donor.category} ${donor.amount}`.toLowerCase().includes(donorQuery.trim().toLowerCase()));
+  const visibleExpenses = query.data.expenses.filter((expense) => `${expense.description} ${expense.category} ${expense.amount}`.toLowerCase().includes(expenseQuery.trim().toLowerCase()));
   const photos = query.data.gallery.filter((g) => g.kind === "photo");
   const videos = query.data.gallery.filter((g) => g.kind === "video");
 
@@ -100,20 +106,32 @@ export default function FestivalPublic() {
           <article className="glass rounded-3xl p-5"><p className="text-xs text-[var(--muted)]">Balance</p><p className="mt-2 text-3xl"><AnimatedNumber value={finance.balance} format={inr} /></p></article>
         </div>
         <div className="mt-8">
-          <Tabs value={tab} onChange={setTab} tabs={["Overview", "Donors", "Expenses", "Events", "Photos", "Videos", "Committee", "Reports", "Nearby Vendors", "Advertisements"].map((label) => ({ id: label.toLowerCase().replace(" ", "-"), label }))} />
-          {tab === "overview" && <p className="max-w-3xl leading-7 text-white/80">{festival.description}</p>}
+          <Tabs value={tab} onChange={setTab} tabs={["Overview", "Donors", "Expenses", "Events", "Photos", "Videos", "Committee", "Reports", "Nearby Vendors"].map((label) => ({ id: label.toLowerCase().replace(" ", "-"), label }))} />
+          {tab === "overview" && <>
+            <p className="max-w-3xl leading-7 text-white/80">{festival.description}</p>
+            <section className="glass mt-5 max-w-xl rounded-2xl p-4">
+              <h2 className="text-lg">Festival admin contact</h2>
+              <p className="mt-1 text-sm text-white/70">{festival.contactName || "Festival administrator"}</p>
+              {festival.contactMobile && <a className="mt-1 inline-block text-amber-200 underline" href={`tel:${festival.contactMobile}`}>{festival.contactMobile}</a>}
+            </section>
+            <section className="mt-8"><h2 className="mb-3 text-xl">Local vendor advertisements</h2><AdCarousel ads={ads.data || []} /></section>
+          </>}
           {tab === "donors" && (
             <div className="space-y-3">
+              <SearchBar value={donorSearch} onChange={setDonorSearch} placeholder="Search donations by donor or category" />
               <ReportDownloads onDownload={downloadReport} />
-              {query.data.donors.length ? query.data.donors.map((donor) => (
+              {visibleDonors.length ? visibleDonors.map((donor) => (
                 <article key={donor._id} className="glass flex flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3 text-sm">
                   <span>{donor.name} · {donor.category} · {inr(donor.amount)} · {prettyDate(donor.date)}</span>
                   <Button className="px-4 py-2" onClick={() => void downloadReceipt(donor)}>Download receipt</Button>
                 </article>
-              )) : <EmptyState title="No donors added yet." body="The admin has not entered contribution records for this festival." />}
+              )) : <EmptyState title={query.data.donors.length ? "No donations match your search." : "No donors added yet."} body={query.data.donors.length ? "Try another donor name or category." : "The admin has not entered contribution records for this festival."} />}
             </div>
           )}
-          {tab === "expenses" && (query.data.expenses.length ? <RecordList rows={query.data.expenses.map((e) => `${e.description} · ${e.category} · ${inr(e.amount)} · ${prettyDate(e.date)}`)} /> : <EmptyState title="No expenses yet." body="Spending will appear here once the admin records it." />)}
+          {tab === "expenses" && <div className="space-y-3">
+            <SearchBar value={expenseSearch} onChange={setExpenseSearch} placeholder="Search expenses by description or category" />
+            {visibleExpenses.length ? <RecordList rows={visibleExpenses.map((e) => `${e.description} · ${e.category} · ${inr(e.amount)} · ${prettyDate(e.date)}`)} /> : <EmptyState title={query.data.expenses.length ? "No expenses match your search." : "No expenses yet."} body={query.data.expenses.length ? "Try another description or category." : "Spending will appear here once the admin records it."} />}
+          </div>}
           {tab === "events" && <EventList events={query.data.events} />}
           {tab === "photos" && <MediaGrid items={photos} onOpen={setLightbox} />}
           {tab === "videos" && <MediaGrid items={videos} onOpen={setLightbox} />}
@@ -141,16 +159,19 @@ export default function FestivalPublic() {
               {nearby.data && nearby.data.data.length === 0 && <EmptyState title="No vendors within 20 km." body="Businesses closer to this festival will show up here." />}
             </div>
           )}
-          {tab === "advertisements" && <AdCarousel ads={ads.data || []} />}
         </div>
       </div>
       {vendor && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-label={vendor.businessName}>
           <div className="w-full max-w-lg rounded-3xl bg-[#1a100b] p-6">
             <h2 className="text-2xl">{vendor.businessName}</h2>
+            <p className="mt-1 text-sm text-white/70">Owner: {vendor.ownerName}</p>
             <p className="text-amber-200">{vendor.category}</p>
             <p className="mt-3 text-sm text-white/75">{vendor.description}</p>
-            <p className="mt-2 text-sm">{vendor.contactMobile}</p>
+            <p className="mt-2 text-sm">{[vendor.address, vendor.village, vendor.district, vendor.state, vendor.pincode].filter(Boolean).join(", ")}</p>
+            {vendor.businessHours && <p className="mt-2 text-sm">Hours: {vendor.businessHours}</p>}
+            {vendor.contactMobile && <a className="mt-2 inline-block text-sm text-amber-200 underline" href={`tel:${vendor.contactMobile}`}>{vendor.contactMobile}</a>}
+            {(vendor.images || []).length > 0 && <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">{vendor.images?.map((image, index) => <img key={image.url || index} src={image.url} alt={image.originalName || `${vendor.businessName} photo ${index + 1}`} className="h-28 w-full rounded-xl object-cover" />)}</div>}
             {(vendor.products || []).length > 0 && (
               <ul className="mt-4 space-y-2">
                 {vendor.products?.map((product) => (

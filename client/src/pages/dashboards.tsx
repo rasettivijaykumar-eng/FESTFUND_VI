@@ -2,11 +2,12 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { api, errorMessage, inr, prettyDate, type Analytics, type Donor, type Expense, type FestEvent, type GalleryItem, type Note } from "../lib/api";
+import { api, errorMessage, inr, prettyDate, type Ad, type Analytics, type Donor, type Expense, type FestEvent, type GalleryItem, type Note } from "../lib/api";
 import { useFestivalScope } from "../hooks/useFestivalScope";
 import { LocationPicker } from "../components/LocationPicker";
 import { useAuth, useMotionPref, useToast } from "../context/AppState";
 import { AnimatedNumber, Badge, Button, ConfirmDialog, EmptyState, Field, FileInput, Modal, PageHeader, SearchBar, SelectInput, Skeleton, StatCard, Tabs, TextArea, TextInput, useDebounced } from "../components/ui";
+import { AdCarousel } from "./AdCarousel";
 
 const colors = ["#FF6B00", "#FF8A00", "#FFC107", "#E65100", "#FFB300", "#8D4A1F"];
 
@@ -28,6 +29,7 @@ export function useAnalytics(festId?: string) {
 export function AdminHome() {
   const { festId, current, loading } = useFestivalScope();
   const query = useAnalytics(festId);
+  const ads = useQuery({ queryKey: ["public-ads"], queryFn: async () => (await api.get("/public/advertisements")).data.data as Ad[] });
   if (loading || query.isLoading) return <div className="grid gap-3 md:grid-cols-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-32" />)}</div>;
   if (!festId) return <EmptyState title="Choose a festival" body="Select a festival in the header. The dashboard shows only that festival." />;
   const data = query.data;
@@ -46,6 +48,7 @@ export function AdminHome() {
         <StatCard label="Gallery items" value={<AnimatedNumber value={data.gallery} />} />
         <StatCard label="Nearby vendors" value={<AnimatedNumber value={data.nearbyVendors} />} hint="Within 20 km" />
       </div>
+      <section className="mt-6"><h2 className="mb-3 text-xl">Local vendor advertisements</h2><AdCarousel ads={ads.data || []} /></section>
       <div className="mt-6"><FinanceCharts data={data} /></div>
     </div>
   );
@@ -319,7 +322,7 @@ export function DonorsPage({ canEdit }: { canEdit: boolean }) {
         <Button onClick={() => void downloadReport("expenses", "pdf")}>Expense report PDF</Button>
         <Button variant="ghost" onClick={() => void downloadReport("expenses", "xlsx")}>Expense report Excel</Button>
       </div>
-      <SearchBar value={q} onChange={setQ} placeholder="Search by name" />
+      <SearchBar value={q} onChange={setQ} placeholder="Search donations by donor, mobile, or category" />
       {query.isLoading ? <Skeleton className="mt-4 h-40" /> : !query.data?.length ? <div className="mt-4"><EmptyState title="No donors added yet." body="Add your first donor record." /></div> : (
         <div className="mt-4 overflow-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
@@ -366,20 +369,22 @@ export function ExpensesPage({ canEdit }: { canEdit: boolean }) {
   const { push } = useToast();
   const client = useQueryClient();
   const [category, setCategory] = useState("");
+  const [q, setQ] = useState("");
+  const debounced = useDebounced(q);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ description: "", amount: "", category: "Decoration", date: todayLocal() });
   const [bill, setBill] = useState<File | null>(null);
   const query = useQuery({
-    queryKey: ["expenses", festId, category],
+    queryKey: ["expenses", festId, category, debounced],
     enabled: Boolean(festId),
-    queryFn: async () => (await api.get("/expenses", { params: { festId, category: category || undefined } })).data.data as Expense[],
+    queryFn: async () => (await api.get("/expenses", { params: { festId, category: category || undefined, q: debounced || undefined } })).data.data as Expense[],
   });
   const totals = useMemo(() => (query.data || []).reduce((sum, item) => sum + item.amount, 0), [query.data]);
   if (!festId) return <EmptyState title="Choose a festival" body="Expenses belong to one Fest ID." />;
   return (
     <div>
       <PageHeader title="Expenses" subtitle={`${festId} · recorded spend ${inr(totals)}`} action={canEdit ? <Button onClick={() => { setForm({ description: "", amount: "", category: "Decoration", date: todayLocal() }); setOpen(true); }}>Add expense</Button> : undefined} />
-      <SelectInput value={category} onChange={(e) => setCategory(e.target.value)}><option value="">All categories</option>{expenseCategories.map((item) => <option key={item}>{item}</option>)}</SelectInput>
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_16rem]"><SearchBar value={q} onChange={setQ} placeholder="Search expenses by description" /><SelectInput value={category} onChange={(e) => setCategory(e.target.value)}><option value="">All categories</option>{expenseCategories.map((item) => <option key={item}>{item}</option>)}</SelectInput></div>
       {query.isLoading ? <Skeleton className="mt-4 h-40" /> : !query.data?.length ? <div className="mt-4"><EmptyState title="No expenses yet." body="Add a bill when you have one. Upload is optional." /></div> : (
         <div className="mt-4 space-y-2">{query.data.map((expense) => (
           <article key={expense._id} className="glass flex flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3 text-sm">
@@ -648,6 +653,7 @@ const reports = [
 export function ReportsPage() {
   const { festId } = useFestivalScope();
   const { push } = useToast();
+  const totals = useAnalytics(festId);
   async function download(type: string, format: string) {
     if (!festId) return;
     try { await saveBlob(`/reports/${type}`, `${type}-${festId}.${format}`, { festId, format }); }
@@ -656,6 +662,11 @@ export function ReportsPage() {
   return (
     <div>
       <PageHeader title="Reports" subtitle={festId || "Select a festival"} />
+      {totals.data && <div className="mb-5 grid gap-3 sm:grid-cols-3">
+        <StatCard label="Total donations" value={inr(totals.data.contributions)} />
+        <StatCard label="Total expenses" value={inr(totals.data.expenses)} />
+        <StatCard label="Net balance" value={inr(totals.data.balance)} />
+      </div>}
       <div className="grid gap-3 md:grid-cols-2">
         {reports.map(([type, label]) => (
           <article key={type} className="glass rounded-3xl p-5">

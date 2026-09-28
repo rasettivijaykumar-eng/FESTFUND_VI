@@ -19,7 +19,10 @@ export const listExpenses = asyncHandler(async (req, res) => {
   await loadFestivalForActor(req, festId, "read");
   const filter: Record<string, unknown> = { festId };
   if (req.query.category) filter.category = String(req.query.category);
-  if (req.query.q) filter.description = new RegExp(escapeRegex(String(req.query.q)), "i");
+  if (req.query.q) {
+    const search = new RegExp(escapeRegex(String(req.query.q)), "i");
+    filter.$or = [{ description: search }, { category: search }];
+  }
   if (req.query.min || req.query.max) {
     filter.amount = {
       ...(req.query.min ? { $gte: Number(req.query.min) } : {}),

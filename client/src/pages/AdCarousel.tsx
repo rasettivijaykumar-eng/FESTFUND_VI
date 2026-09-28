@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, errorMessage, type Ad } from "../lib/api";
+import { api, errorMessage, inr, prettyDate, type Ad } from "../lib/api";
 import { useToast } from "../context/AppState";
 
 export function AdCarousel({ ads }: { ads: Ad[] }) {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   useEffect(() => {
     if (paused || ads.length < 2) return;
     const timer = window.setInterval(() => setIndex((i) => (i + 1) % ads.length), 4200);
@@ -28,6 +29,7 @@ export function AdCarousel({ ads }: { ads: Ad[] }) {
           <p className="mt-3 max-w-md text-white/75">{ad.description}</p>
           <p className="mt-4 text-sm text-white/60">{ad.businessAddress}</p>
           {ad.contactNumber && <a className="mt-4 text-sm text-amber-200" href={`tel:${ad.contactNumber}`}>{ad.contactNumber}</a>}
+          <button className="mt-4 w-fit text-sm underline underline-offset-4" onClick={() => setDetailsOpen(true)}>View advertisement details</button>
         </div>
         <div className="min-h-56 bg-orange-950/40">
           {ad.mediaType === "video" && ad.mediaUrl ? <video src={ad.mediaUrl} className="h-full w-full object-cover" controls /> : ad.mediaUrl ? <img src={ad.mediaUrl} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-white/40">No media yet</div>}
@@ -42,6 +44,37 @@ export function AdCarousel({ ads }: { ads: Ad[] }) {
           {ads.map((item, i) => <button key={item._id} aria-label={`Show advertisement ${i + 1}`} className={`h-2 w-2 rounded-full ${i === index ? "bg-amber-300" : "bg-white/30"}`} onClick={() => setIndex(i)} />)}
         </div>
       </div>
+      {detailsOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4" role="dialog" aria-modal="true" aria-label={`${ad.title} advertisement details`}>
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-3xl border border-white/10 bg-[#1a100b] p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div><p className="text-sm text-amber-200">{ad.category || "Local business"} · {ad.isFree ? "Free advertisement" : "Advertisement"}</p><h2 className="mt-1 text-2xl">{ad.title}</h2></div>
+              <button aria-label="Close advertisement details" className="text-sm underline" onClick={() => setDetailsOpen(false)}>Close</button>
+            </div>
+            <p className="mt-4 whitespace-pre-wrap text-sm text-white/75">{ad.description || "No description provided."}</p>
+            <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+              <div><dt className="text-white/50">Business</dt><dd>{ad.vendor?.businessName || "Local business"}</dd></div>
+              {ad.vendor?.ownerName && <div><dt className="text-white/50">Owner</dt><dd>{ad.vendor.ownerName}</dd></div>}
+              <div><dt className="text-white/50">Contact</dt><dd>{ad.contactNumber || ad.vendor?.contactMobile || "Not provided"}</dd></div>
+              <div><dt className="text-white/50">Address</dt><dd>{ad.businessAddress || [ad.vendor?.address, ad.vendor?.village, ad.vendor?.district, ad.vendor?.state, ad.vendor?.pincode].filter(Boolean).join(", ") || "Not provided"}</dd></div>
+              <div><dt className="text-white/50">Business hours</dt><dd>{ad.vendor?.businessHours || "Not provided"}</dd></div>
+              {ad.validUntil && <div><dt className="text-white/50">Valid until</dt><dd>{prettyDate(ad.validUntil)}</dd></div>}
+              {ad.createdAt && <div><dt className="text-white/50">Posted</dt><dd>{prettyDate(ad.createdAt)}</dd></div>}
+            </dl>
+            {ad.vendor?.description && <p className="mt-4 text-sm text-white/75">{ad.vendor.description}</p>}
+            {(ad.vendor?.images?.length || ad.vendor?.products?.length) ? <>
+              <h3 className="mt-5 text-lg">Business photos and products</h3>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                {ad.vendor?.images?.map((image) => <img key={image.url} src={image.url} alt={image.originalName || ad.vendor?.businessName || "Business"} className="h-40 w-full rounded-xl object-cover" />)}
+                {ad.vendor?.products?.map((product) => <article key={product._id} className="flex items-center gap-3 rounded-xl bg-white/5 p-3">
+                  {product.imageUrl && <img src={product.imageUrl} alt={product.name} className="h-16 w-16 rounded-lg object-cover" />}
+                  <span className="flex-1">{product.name}</span><span>{inr(product.price)}</span>
+                </article>)}
+              </div>
+            </> : null}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
