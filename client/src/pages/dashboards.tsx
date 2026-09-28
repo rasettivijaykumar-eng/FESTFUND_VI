@@ -7,7 +7,7 @@ import { useFestivalScope } from "../hooks/useFestivalScope";
 import { LocationPicker } from "../components/LocationPicker";
 import { useAuth, useMotionPref, useToast } from "../context/AppState";
 import { AnimatedNumber, Badge, Button, ConfirmDialog, EmptyState, Field, FileInput, Modal, PageHeader, SearchBar, SelectInput, Skeleton, StatCard, Tabs, TextArea, TextInput, useDebounced } from "../components/ui";
-import { AdCarousel } from "./AdCarousel";
+import { AdCarousel, AdDetailsModal } from "./AdCarousel";
 
 const colors = ["#FF6B00", "#FF8A00", "#FFC107", "#E65100", "#FFB300", "#8D4A1F"];
 
@@ -638,41 +638,52 @@ export function MembersPage() {
 
 export function NearbyPage() {
   const { festId, current } = useFestivalScope();
-  const query = useQuery({ queryKey: ["nearby-admin", festId], enabled: Boolean(festId), queryFn: async () => (await api.get("/vendors/nearby", { params: { festId, radius: 20 } })).data as { data: { _id: string; businessName: string; category: string; distanceKm: number | null; village: string; contactMobile: string; description: string; products?: { _id: string; name: string; price: number; imageUrl?: string }[] }[]; meta: { mapsConfigured: boolean } } });
+  const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
+  const query = useQuery({ queryKey: ["nearby-admin", festId], enabled: Boolean(festId), queryFn: async () => (await api.get("/vendors/nearby", { params: { festId, radius: 20 } })).data as { data: { _id: string; businessName: string; ownerName: string; category: string; distanceKm: number | null; village: string; district: string; state: string; pincode: string; address: string; contactMobile: string; description: string; businessHours: string; logoUrl?: string; images?: { url: string; originalName?: string }[]; products?: { _id: string; name: string; price: number; imageUrl?: string }[] }[]; meta: { mapsConfigured: boolean } } });
+  const selectedVendor = query.data?.data.find((vendor) => vendor._id === selectedVendorId);
   return (
     <div>
       <PageHeader title="Nearby vendors" subtitle="Default radius 20 km" />
       {current?.latitude != null && current.longitude != null && <iframe title="Festival map" className="mb-4 h-64 w-full rounded-3xl border-0" src={`https://maps.google.com/maps?q=${current.latitude},${current.longitude}&z=14&output=embed`} />}
       {(query.data?.data || []).map((vendor) => (
         <article key={vendor._id} className="glass mb-3 rounded-3xl p-4">
-          <h3>{vendor.businessName}</h3>
-          <p className="text-sm text-[var(--muted)]">{vendor.category} · {vendor.distanceKm ?? "—"} km · {vendor.village}</p>
-          <p className="mt-2 text-sm">{vendor.description}</p>
-          <a className="text-sm text-amber-200" href={`tel:${vendor.contactMobile}`}>{vendor.contactMobile}</a>
-          {(vendor.products || []).length > 0 && (
-            <ul className="mt-3 space-y-2">
-              {vendor.products?.map((product) => (
-                <li key={product._id} className="flex items-center gap-3 rounded-2xl bg-white/5 px-3 py-2 text-sm">
-                  {product.imageUrl ? <img src={product.imageUrl} alt="" className="h-10 w-10 rounded-xl object-cover" /> : null}
-                  <span className="flex-1">{product.name}</span>
-                  <span>{inr(product.price)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <button className="flex w-full items-center gap-4 text-left" onClick={() => setSelectedVendorId(vendor._id)}>
+            {vendor.logoUrl ? <img src={vendor.logoUrl} alt="" className="h-16 w-16 rounded-xl object-contain" /> : <span className="h-16 w-16 rounded-xl bg-white/5" />}
+            <span><span className="block text-lg">{vendor.businessName}</span><span className="block text-sm text-[var(--muted)]">{vendor.category} · {vendor.distanceKm ?? "—"} km · {vendor.village}</span><span className="mt-1 block text-sm text-amber-200">View vendor details</span></span>
+          </button>
         </article>
       ))}
+      {selectedVendor && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-4" role="dialog" aria-modal="true" aria-label={`${selectedVendor.businessName} details`}>
+        <div className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-3xl border border-white/10 bg-[#1a100b] p-6 text-white">
+          <div className="flex items-start justify-between gap-4"><div><p className="text-2xl">{selectedVendor.businessName}</p><p className="text-amber-200">{selectedVendor.category}</p></div><button className="underline" onClick={() => setSelectedVendorId(null)}>Close</button></div>
+          <p className="mt-2 text-sm text-white/70">Owner: {selectedVendor.ownerName}</p>
+          <p className="mt-3 text-sm">{[selectedVendor.address, selectedVendor.village, selectedVendor.district, selectedVendor.state, selectedVendor.pincode].filter(Boolean).join(", ")}</p>
+          {selectedVendor.contactMobile && <a className="mt-2 inline-block text-sm text-amber-200 underline" href={`tel:${selectedVendor.contactMobile}`}>{selectedVendor.contactMobile}</a>}
+          {selectedVendor.businessHours && <p className="mt-2 text-sm">Business hours: {selectedVendor.businessHours}</p>}
+          {selectedVendor.description && <p className="mt-3 whitespace-pre-wrap text-sm text-white/75">{selectedVendor.description}</p>}
+          {(selectedVendor.images || []).length > 0 && <><h3 className="mt-5 text-lg">Shop gallery</h3><div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{selectedVendor.images?.map((image, index) => <a key={image.url || index} href={image.url} target="_blank" rel="noreferrer" title="Open full-size image"><img src={image.url} alt={image.originalName || `${selectedVendor.businessName} photo ${index + 1}`} className="h-48 w-full rounded-xl bg-black/30 object-contain" /></a>)}</div></>}
+          {(selectedVendor.products || []).length > 0 && <><h3 className="mt-5 text-lg">Products</h3><div className="mt-3 grid gap-3 sm:grid-cols-2">{selectedVendor.products?.map((product) => <article key={product._id} className="flex items-center gap-3 rounded-xl bg-white/5 p-3">
+            {product.imageUrl ? <a href={product.imageUrl} target="_blank" rel="noreferrer" title="Open full-size product image"><img src={product.imageUrl} alt={product.name} className="h-24 w-24 rounded-lg object-contain" /></a> : <span className="h-24 w-24 rounded-lg bg-white/5" />}
+            <span className="flex-1">{product.name}</span><span>{inr(product.price)}</span>
+          </article>)}</div></>}
+        </div>
+      </div>}
     </div>
   );
 }
 
 export function AdsAdminPage() {
-  const query = useQuery({ queryKey: ["ads"], queryFn: async () => (await api.get("/advertisements")).data.data as { _id: string; title: string; status: string; views: number; category: string; vendor?: { businessName?: string } }[] });
+  const [selectedAd, setSelectedAd] = useState<Ad | null>(null);
+  const query = useQuery({ queryKey: ["ads"], queryFn: async () => (await api.get("/advertisements")).data.data as Ad[] });
   return (
     <div>
       <PageHeader title="Advertisements" subtitle="Vendor advertising is free." />
-      {(query.data || []).map((ad) => <article key={ad._id} className="glass mb-3 rounded-3xl p-4"><h3>{ad.title}</h3><p className="text-sm text-[var(--muted)]">{ad.vendor?.businessName} · {ad.status} · {ad.views} views</p></article>)}
+      {(query.data || []).map((ad) => <button key={ad._id} onClick={() => setSelectedAd(ad)} className="glass mb-3 flex w-full items-center gap-4 rounded-2xl p-4 text-left">
+        {ad.mediaUrl && ad.mediaType === "image" ? <img src={ad.mediaUrl} alt="" className="h-16 w-24 rounded-lg object-contain" /> : <span className="h-16 w-24 rounded-lg bg-white/5" />}
+        <span><span className="block">{ad.title}</span><span className="block text-sm text-[var(--muted)]">{ad.vendor?.businessName} · {ad.status} · {ad.views} views</span><span className="mt-1 block text-sm text-amber-200">View full advertisement</span></span>
+      </button>)}
       {query.data && query.data.length === 0 && <EmptyState title="No advertisements" body="Vendors can publish a free advertisement from their dashboard." />}
+      {selectedAd && <AdDetailsModal ad={selectedAd} onClose={() => setSelectedAd(null)} />}
     </div>
   );
 }

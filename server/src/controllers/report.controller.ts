@@ -154,7 +154,8 @@ export const publicFestivalReport = asyncHandler(async (req, res) => {
   doc.fontSize(11).fillColor("#444").text(`${festival.name} · ${festival.festId}`, 42, 126);
   doc.moveDown(2);
   doc.fontSize(10).fillColor("#111");
-  for (const line of reportLines(type, donors, expenses, [], [], [], contributions, spent)) doc.text(line);
+  if (type === "donors" || type === "expenses") drawReportTable(doc, type, donors, expenses, [], title, contributions, spent);
+  else for (const line of reportLines(type, donors, expenses, [], [], [], contributions, spent)) doc.text(line);
   doc.end();
 });
 
@@ -216,10 +217,88 @@ export const downloadReport = asyncHandler(async (req, res) => {
   if (festival) doc.fontSize(11).fillColor("#444").text(`${festival.name} · ${festival.festId}`, 42, 126);
   doc.moveDown(2);
   doc.fontSize(10).fillColor("#111");
-  const body = reportLines(type, donors, expenses, events, committee, ads, contributions, spent);
-  for (const line of body) doc.text(line);
+  if (type === "committee" || type === "donors" || type === "expenses") {
+    drawReportTable(doc, type, donors, expenses, committee, title, contributions, spent);
+  } else {
+    const body = reportLines(type, donors, expenses, events, committee, ads, contributions, spent);
+    for (const line of body) doc.text(line);
+  }
   doc.end();
 });
+
+function drawReportTable(
+  doc: InstanceType<typeof PDFDocument>,
+  type: string,
+  donors: { name: string; amount: number; date: Date; category: string }[],
+  expenses: { description: string; amount: number; category: string; date: Date }[],
+  committee: { user?: unknown }[],
+  title: string,
+  contributions: number,
+  spent: number,
+) {
+  type Column = { title: string; ratio: number; align?: "left" | "right" };
+  const columns: Column[] = type === "committee"
+    ? [{ title: "Committee member", ratio: 0.34 }, { title: "Email", ratio: 0.39 }, { title: "Mobile", ratio: 0.27 }]
+    : type === "expenses"
+      ? [{ title: "Expense", ratio: 0.38 }, { title: "Category", ratio: 0.21 }, { title: "Amount", ratio: 0.17, align: "right" }, { title: "Date", ratio: 0.24 }]
+      : [{ title: "Donor", ratio: 0.34 }, { title: "Category", ratio: 0.22 }, { title: "Amount", ratio: 0.18, align: "right" }, { title: "Date", ratio: 0.26 }];
+  const rows: { cells: string[]; total?: boolean }[] = type === "committee"
+    ? committee.map((member) => {
+      const user = member.user as { name?: string; email?: string; mobile?: string } | null;
+      return { cells: [user?.name || "Member", user?.email || "", user?.mobile || ""] };
+    })
+    : type === "expenses"
+      ? [
+        ...expenses.map((expense) => ({ cells: [expense.description, expense.category, inr(expense.amount), new Date(expense.date).toLocaleDateString("en-IN")] })),
+        { cells: ["TOTAL EXPENSES", "", inr(spent), ""], total: true },
+      ]
+      : [
+        ...donors.map((donor) => ({ cells: [donor.name, donor.category, inr(donor.amount), new Date(donor.date).toLocaleDateString("en-IN")] })),
+        { cells: ["TOTAL DONATIONS", "", inr(contributions), ""], total: true },
+      ];
+  const margin = 42;
+  const tableWidth = doc.page.width - margin * 2;
+  const widths = columns.map((column) => tableWidth * column.ratio);
+  const headerHeight = 28;
+  let y = doc.y;
+
+  const drawHeader = (continuation = false) => {
+    if (continuation) {
+      doc.font("Helvetica-Bold").fontSize(9).fillColor("#555").text(`${title} (continued)`, margin, margin, { width: tableWidth });
+      y = margin + 20;
+    }
+    let x = margin;
+    columns.forEach((column, index) => {
+      doc.rect(x, y, widths[index], headerHeight).fillAndStroke("#FCE8D7", "#E7C9B1");
+      doc.font("Helvetica-Bold").fontSize(9).fillColor("#572B13").text(column.title, x + 6, y + 8, { width: widths[index] - 12, align: column.align || "left" });
+      x += widths[index];
+    });
+    y += headerHeight;
+  };
+
+  drawHeader();
+  rows.forEach((row, rowIndex) => {
+    doc.font(row.total ? "Helvetica-Bold" : "Helvetica").fontSize(9);
+    const textHeights = row.cells.map((cell, index) => doc.heightOfString(cell || " ", { width: widths[index] - 12 }));
+    const rowHeight = Math.max(28, ...textHeights.map((height) => height + 12));
+    if (y + rowHeight > doc.page.height - margin) {
+      doc.addPage();
+      drawHeader(true);
+    }
+    let x = margin;
+    row.cells.forEach((cell, index) => {
+      const fill = row.total ? "#FFF0E4" : rowIndex % 2 === 0 ? "#FFFFFF" : "#FAFAFA";
+      doc.rect(x, y, widths[index], rowHeight).fillAndStroke(fill, "#E4E4E4");
+      doc.font(row.total ? "Helvetica-Bold" : "Helvetica").fontSize(9).fillColor("#24170F").text(cell || "", x + 6, y + 6, {
+        width: widths[index] - 12,
+        align: columns[index].align || "left",
+      });
+      x += widths[index];
+    });
+    y += rowHeight;
+  });
+  doc.y = y + 10;
+}
 
 function reportLines(type: string, donors: { name: string; amount: number; date: Date; category: string }[], expenses: { description: string; amount: number; category: string; date: Date }[], events: { name: string; date: Date; status: string; location?: string }[], committee: { user?: unknown }[], ads: { title: string; status: string; views: number; vendor?: unknown }[], contributions: number, spent: number) {
   const lines: string[] = [];

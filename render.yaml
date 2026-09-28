@@ -16,6 +16,12 @@ services:
         generateValue: true
       - key: CLIENT_URL
         value: https://festfund-vi-1.onrender.com,https://festfund-web.onrender.com
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
 
   - type: web
     name: festfund-web

@@ -156,7 +156,7 @@ export const listAds = asyncHandler(async (req, res) => {
     filter.vendor = vendor._id;
   }
   if (req.query.status) filter.status = String(req.query.status);
-  const ads = await Advertisement.find(filter).populate("vendor", "businessName category logoUrl district").sort({ createdAt: -1 });
+  const ads = await Advertisement.find(filter).populate("vendor", "businessName ownerName category logoUrl district village state pincode address description contactMobile businessHours images products").sort({ createdAt: -1 });
   res.json({ success: true, data: ads });
 });
 

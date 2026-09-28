@@ -4,9 +4,11 @@ import { api, errorMessage, inr, prettyDate, type Ad, type VendorProduct, type V
 import { useToast } from "../context/AppState";
 import { Badge, Button, EmptyState, Field, FileInput, Modal, PageHeader, SelectInput, Skeleton, StatCard, TextArea, TextInput } from "../components/ui";
 import { LocationPicker } from "../components/LocationPicker";
+import { AdCarousel } from "./AdCarousel";
 
 export function VendorHome() {
   const ads = useQuery({ queryKey: ["my-ads"], queryFn: async () => (await api.get("/advertisements")).data.data as Ad[] });
+  const publicAds = useQuery({ queryKey: ["public-ads"], queryFn: async () => (await api.get("/public/advertisements")).data.data as Ad[] });
   const festivals = useQuery({ queryKey: ["vendor-festivals"], queryFn: async () => (await api.get("/vendors/festivals")).data.data as { name: string }[] });
   if (ads.isLoading) return <Skeleton className="h-32" />;
   const views = (ads.data || []).reduce((sum, ad) => sum + ad.views, 0);
@@ -18,6 +20,7 @@ export function VendorHome() {
         <StatCard label="Views" value={views} />
         <StatCard label="Nearby festivals" value={festivals.data?.length || 0} hint="Within 20 km" />
       </div>
+      <section className="mt-6"><h2 className="mb-3 text-xl">Local vendor advertisements</h2><AdCarousel ads={publicAds.data || []} /></section>
     </div>
   );
 }
