@@ -222,13 +222,20 @@ export const downloadReport = asyncHandler(async (req, res) => {
 });
 
 function reportLines(type: string, donors: { name: string; amount: number; date: Date; category: string }[], expenses: { description: string; amount: number; category: string; date: Date }[], events: { name: string; date: Date; status: string; location?: string }[], committee: { user?: unknown }[], ads: { title: string; status: string; views: number; vendor?: unknown }[], contributions: number, spent: number) {
-  const lines = [`Total contributions: ${inr(contributions)}`, `Total expenses: ${inr(spent)}`, `Balance: ${inr(contributions - spent)}`, ""];
-  if (type === "summary" || type === "donors") {
+  const lines: string[] = [];
+  if (type === "summary" || type === "funds") lines.push(`Total contributions: ${inr(contributions)}`, `Total expenses: ${inr(spent)}`, `Balance: ${inr(contributions - spent)}`, "");
+  if (type === "donors") {
+    lines.push(`Total donations: ${inr(contributions)}`, "", "Donations");
+    donors.forEach((d) => lines.push(`${d.name} · ${inr(d.amount)} · ${d.category} · ${new Date(d.date).toLocaleDateString("en-IN")}`));
+  } else if (type === "summary") {
     lines.push("Donors");
     donors.forEach((d) => lines.push(`${d.name} · ${inr(d.amount)} · ${d.category} · ${new Date(d.date).toLocaleDateString("en-IN")}`));
     lines.push("");
   }
-  if (type === "summary" || type === "expenses" || type === "funds") {
+  if (type === "expenses") {
+    lines.push(`Total expenses: ${inr(spent)}`, "", "Expenses");
+    expenses.forEach((e) => lines.push(`${e.description} · ${e.category} · ${inr(e.amount)} · ${new Date(e.date).toLocaleDateString("en-IN")}`));
+  } else if (type === "summary" || type === "funds") {
     lines.push("Expenses");
     expenses.forEach((e) => lines.push(`${e.description} · ${e.category} · ${inr(e.amount)}`));
     lines.push("");
@@ -241,8 +248,8 @@ function reportLines(type: string, donors: { name: string; amount: number; date:
   if (type === "committee") {
     lines.push("Committee");
     committee.forEach((m) => {
-      const user = m.user as { name?: string; email?: string } | null;
-      lines.push(`${user?.name || "Member"} · ${user?.email || ""}`);
+      const user = m.user as { name?: string; email?: string; mobile?: string } | null;
+      lines.push(`${user?.name || "Member"} · ${user?.email || ""} · ${user?.mobile || ""}`);
     });
   }
   if (type === "advertisements") {
@@ -257,18 +264,18 @@ function reportLines(type: string, donors: { name: string; amount: number; date:
 
 function toCsv(type: string, donors: { name: string; mobile?: string; amount: number; date: Date; category: string }[], expenses: { description: string; amount: number; category: string; date: Date }[], events: { name: string; date: Date; status: string }[], committee: { user?: unknown }[], ads: { title: string; status: string; views: number }[], contributions: number, spent: number) {
   if (type === "donors") {
-    return ["Name,Category,Amount,Date", ...donors.map((d) => `"${d.name}","${d.category}",${d.amount},${new Date(d.date).toISOString().slice(0, 10)}`)].join("\n");
+    return ["Name,Category,Amount,Date", ...donors.map((d) => `"${d.name}","${d.category}",${d.amount},${new Date(d.date).toISOString().slice(0, 10)}`), `Total donations,,${contributions},`].join("\n");
   }
   if (type === "expenses") {
-    return ["Description,Category,Amount,Date", ...expenses.map((e) => `"${e.description}","${e.category}",${e.amount},${new Date(e.date).toISOString().slice(0, 10)}`)].join("\n");
+    return ["Description,Category,Amount,Date", ...expenses.map((e) => `"${e.description}","${e.category}",${e.amount},${new Date(e.date).toISOString().slice(0, 10)}`), `Total expenses,,${spent},`].join("\n");
   }
   if (type === "events") {
     return ["Name,Status,Date", ...events.map((e) => `"${e.name}","${e.status}",${new Date(e.date).toISOString().slice(0, 10)}`)].join("\n");
   }
   if (type === "committee") {
-    return ["Name,Email", ...committee.map((m) => {
-      const user = m.user as { name?: string; email?: string } | null;
-      return `"${user?.name || ""}","${user?.email || ""}"`;
+    return ["Name,Email,Mobile", ...committee.map((m) => {
+      const user = m.user as { name?: string; email?: string; mobile?: string } | null;
+      return `"${user?.name || ""}","${user?.email || ""}","${user?.mobile || ""}"`;
     })].join("\n");
   }
   if (type === "advertisements") {
@@ -283,11 +290,13 @@ function fillSheet(sheet: ExcelJS.Worksheet, type: string, donors: { name: strin
   if (type === "donors" || type === "summary" || type === "funds") {
     sheet.addRow(["Donor", "Category", "Amount", "Date"]);
     donors.forEach((d) => sheet.addRow([d.name, d.category, d.amount, new Date(d.date).toISOString().slice(0, 10)]));
+    if (type === "donors") sheet.addRow(["Total donations", "", contributions]);
     sheet.addRow([]);
   }
   if (type === "expenses" || type === "summary" || type === "funds") {
     sheet.addRow(["Expense", "Category", "Amount", "Date"]);
     expenses.forEach((e) => sheet.addRow([e.description, e.category, e.amount, new Date(e.date).toISOString().slice(0, 10)]));
+    if (type === "expenses") sheet.addRow(["Total expenses", "", spent]);
     sheet.addRow([]);
   }
   if (type === "events" || type === "summary") {
@@ -295,18 +304,20 @@ function fillSheet(sheet: ExcelJS.Worksheet, type: string, donors: { name: strin
     events.forEach((e) => sheet.addRow([e.name, e.status, new Date(e.date).toISOString().slice(0, 10)]));
   }
   if (type === "committee") {
-    sheet.addRow(["Name", "Email"]);
+    sheet.addRow(["Name", "Email", "Mobile"]);
     committee.forEach((m) => {
-      const user = m.user as { name?: string; email?: string } | null;
-      sheet.addRow([user?.name || "", user?.email || ""]);
+      const user = m.user as { name?: string; email?: string; mobile?: string } | null;
+      sheet.addRow([user?.name || "", user?.email || "", user?.mobile || ""]);
     });
   }
   if (type === "advertisements") {
     sheet.addRow(["Title", "Status", "Views"]);
     ads.forEach((a) => sheet.addRow([a.title, a.status, a.views]));
   }
-  sheet.addRow([]);
-  sheet.addRow(["Contributions", contributions]);
-  sheet.addRow(["Expenses", spent]);
-  sheet.addRow(["Balance", contributions - spent]);
+  if (!["donors", "expenses", "committee"].includes(type)) {
+    sheet.addRow([]);
+    sheet.addRow(["Contributions", contributions]);
+    sheet.addRow(["Expenses", spent]);
+    sheet.addRow(["Balance", contributions - spent]);
+  }
 }

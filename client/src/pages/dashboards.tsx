@@ -261,7 +261,17 @@ async function saveBlob(url: string, filename: string, params?: Record<string, s
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(href);
+  window.setTimeout(() => URL.revokeObjectURL(href), 60_000);
+}
+
+async function reportDownloadError(error: unknown) {
+  const response = (error as { response?: { data?: unknown; status?: number } } | null)?.response;
+  if (response?.data instanceof Blob) {
+    const body = await response.data.text();
+    try { return (JSON.parse(body) as { message?: string }).message || body; }
+    catch { return body || (response.status ? `Report download failed (HTTP ${response.status})` : errorMessage(error)); }
+  }
+  return errorMessage(error);
 }
 
 export function DonorsPage({ canEdit }: { canEdit: boolean }) {
@@ -641,13 +651,9 @@ export function AdsAdminPage() {
 }
 
 const reports = [
-  ["summary", "Festival Summary"],
-  ["donors", "Donor Report"],
-  ["expenses", "Expense Report"],
-  ["funds", "Fund Summary"],
-  ["events", "Event Report"],
-  ["committee", "Committee Report"],
-  ["advertisements", "Vendor Advertisement Report"],
+  ["committee", "Committee Members"],
+  ["donors", "All Donations with Total"],
+  ["expenses", "All Expenses with Total"],
 ] as const;
 
 export function ReportsPage() {
@@ -657,7 +663,7 @@ export function ReportsPage() {
   async function download(type: string, format: string) {
     if (!festId) return;
     try { await saveBlob(`/reports/${type}`, `${type}-${festId}.${format}`, { festId, format }); }
-    catch (error) { push("error", errorMessage(error)); }
+    catch (error) { push("error", await reportDownloadError(error)); }
   }
   return (
     <div>
