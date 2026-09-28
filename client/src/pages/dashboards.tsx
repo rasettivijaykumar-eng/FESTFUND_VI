@@ -280,14 +280,18 @@ export function DonorsPage({ canEdit }: { canEdit: boolean }) {
   const client = useQueryClient();
   const [q, setQ] = useState("");
   const debounced = useDebounced(q);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(50);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Donor | null>(null);
   const [removeId, setRemoveId] = useState<string | null>(null);
   const query = useQuery({
-    queryKey: ["donors", festId, debounced],
+    queryKey: ["donors", festId, debounced, page, limit],
     enabled: Boolean(festId),
-    queryFn: async () => (await api.get("/donors", { params: { festId, q: debounced, sort: "date", dir: "desc" } })).data.data as Donor[],
+    queryFn: async () => (await api.get("/donors", { params: { festId, q: debounced, page, limit, sort: "date", dir: "desc" } })).data as { data: Donor[]; meta: { page: number; limit: number; total: number } },
   });
+  const donors = query.data?.data || [];
+  const totalDonors = query.data?.meta.total || 0;
   const blank = { name: "", mobile: "", amount: "" };
   const [form, setForm] = useState(blank);
   const [recordDate, setRecordDate] = useState(todayLocal);
@@ -307,7 +311,7 @@ export function DonorsPage({ canEdit }: { canEdit: boolean }) {
       push("success", editing ? "Donor updated" : "Donor added");
       await client.invalidateQueries({ queryKey: ["donors"] });
       await client.invalidateQueries({ queryKey: ["analytics"] });
-    } catch (error) { push("error", errorMessage(error)); }
+    } catch (error) { push("error", await reportDownloadError(error)); }
   }
   async function downloadReceipt(donor: Donor) {
     try {
@@ -315,7 +319,7 @@ export function DonorsPage({ canEdit }: { canEdit: boolean }) {
       const receipt = created.data.data as { _id: string; receiptNo: string };
       await saveBlob(`/receipts/${receipt._id}/pdf`, `${receipt.receiptNo}.pdf`);
       push("success", `Receipt ${receipt.receiptNo} downloaded`);
-    } catch (error) { push("error", errorMessage(error)); }
+    } catch (error) { push("error", await reportDownloadError(error)); }
   }
   async function downloadReport(type: "donors" | "expenses", format: "pdf" | "xlsx") {
     try {
@@ -332,13 +336,26 @@ export function DonorsPage({ canEdit }: { canEdit: boolean }) {
         <Button onClick={() => void downloadReport("expenses", "pdf")}>Expense report PDF</Button>
         <Button variant="ghost" onClick={() => void downloadReport("expenses", "xlsx")}>Expense report Excel</Button>
       </div>
-      <SearchBar value={q} onChange={setQ} placeholder="Search donations by donor, mobile, or category" />
-      {query.isLoading ? <Skeleton className="mt-4 h-40" /> : !query.data?.length ? <div className="mt-4"><EmptyState title="No donors added yet." body="Add your first donor record." /></div> : (
-        <div className="mt-4 overflow-auto">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
+        <SearchBar value={q} onChange={(value) => { setQ(value); setPage(1); }} placeholder="Search donations by donor, mobile, or category" />
+        <SelectInput aria-label="Rows per page" value={limit} onChange={(event) => { setLimit(Number(event.target.value)); setPage(1); }}>
+          {[20, 50, 100].map((size) => <option key={size} value={size}>{size} per page</option>)}
+        </SelectInput>
+      </div>
+      {query.isLoading ? <Skeleton className="mt-4 h-40" /> : !donors.length ? <div className="mt-4"><EmptyState title={debounced ? "No donations match your search." : "No donors added yet."} body={debounced ? "Try another donor name, mobile number, or category." : "Add your first donor record."} /></div> : (
+        <>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-[var(--muted)]">
+          <span>Showing {(page - 1) * limit + 1}–{Math.min(page * limit, totalDonors)} of {totalDonors} donors</span>
+          <div className="flex gap-2">
+            <Button variant="ghost" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>Previous</Button>
+            <Button variant="ghost" disabled={page * limit >= totalDonors} onClick={() => setPage((current) => current + 1)}>Next</Button>
+          </div>
+        </div>
+        <div className="mt-2 overflow-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="text-[var(--muted)]"><tr><th className="py-2">Name</th><th>Mobile</th><th>Amount</th><th>Date</th><th>Receipt</th>{canEdit && <th>Actions</th>}</tr></thead>
             <tbody>
-              {query.data.map((donor) => (
+              {donors.map((donor) => (
                 <tr key={donor._id} className="border-t border-white/10">
                   <td className="py-3">{donor.name}</td>
                   <td>{donor.mobile}</td>
@@ -351,6 +368,7 @@ export function DonorsPage({ canEdit }: { canEdit: boolean }) {
             </tbody>
           </table>
         </div>
+        </>
       )}
       <Modal open={open} title={editing ? "Edit donor" : "Add donor"} onClose={() => setOpen(false)}>
         <div className="grid gap-3">
@@ -691,11 +709,18 @@ export function ReportsPage() {
 
 export function ReceiptsPage() {
   const { festId } = useFestivalScope();
+  const { push } = useToast();
   const query = useQuery({ queryKey: ["receipts", festId], enabled: Boolean(festId), queryFn: async () => (await api.get("/receipts", { params: { festId } })).data.data as { _id: string; receiptNo: string; donorName: string; amount: number }[] });
+  async function downloadReceipt(receipt: { _id: string; receiptNo: string }) {
+    try {
+      await saveBlob(`/receipts/${receipt._id}/pdf`, `${receipt.receiptNo}.pdf`);
+      push("success", `Receipt ${receipt.receiptNo} downloaded`);
+    } catch (error) { push("error", await reportDownloadError(error)); }
+  }
   return (
     <div>
       <PageHeader title="Receipts" subtitle="Generated from admin-entered contributions. Not shown on the public page." />
-      {(query.data || []).map((receipt) => <article key={receipt._id} className="glass mb-2 flex items-center justify-between rounded-2xl px-4 py-3"><span>{receipt.receiptNo} · {receipt.donorName} · {inr(receipt.amount)}</span><a className="underline" href={`${api.defaults.baseURL}/receipts/${receipt._id}/pdf`}>Download PDF</a></article>)}
+      {(query.data || []).map((receipt) => <article key={receipt._id} className="glass mb-2 flex items-center justify-between rounded-2xl px-4 py-3"><span>{receipt.receiptNo} · {receipt.donorName} · {inr(receipt.amount)}</span><button className="underline" onClick={() => void downloadReceipt(receipt)}>Download PDF</button></article>)}
       {query.data && query.data.length === 0 && <EmptyState title="No receipts yet." body="Open a donor record and generate a receipt." />}
     </div>
   );
