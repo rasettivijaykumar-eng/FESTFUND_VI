@@ -5,6 +5,25 @@ export const api = axios.create({
   withCredentials: true,
 });
 
+const apiOrigin = new URL(api.defaults.baseURL || "/api", window.location.origin).origin;
+
+function resolveUploadUrls(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(resolveUploadUrls);
+  if (!value || typeof value !== "object") {
+    return typeof value === "string" && value.startsWith("/uploads/")
+      ? new URL(value, apiOrigin).toString()
+      : value;
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [key, resolveUploadUrls(item)]),
+  );
+}
+
+api.interceptors.response.use((response) => {
+  response.data = resolveUploadUrls(response.data);
+  return response;
+});
+
 export function errorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {
     if (!error.response) return error.code === "ERR_NETWORK" ? "Network error" : "Server unavailable";
