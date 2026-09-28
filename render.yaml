@@ -15,7 +15,7 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: CLIENT_URL
-        value: https://festfund-web.onrender.com
+        value: https://festfund-vi-1.onrender.com,https://festfund-web.onrender.com
 
   - type: web
     name: festfund-web

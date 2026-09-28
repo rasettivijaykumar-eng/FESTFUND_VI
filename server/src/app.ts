@@ -12,7 +12,11 @@ import { uploadErrorHandler } from "./middleware/upload.js";
 export const app = express();
 app.set("trust proxy", 1);
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
-app.use(cors({ origin: env.clientUrl.split(",").map((v) => v.trim()), credentials: true }));
+const allowedOrigins = new Set([
+	...env.clientUrl.split(",").map((origin) => origin.trim()),
+	"https://festfund-vi-1.onrender.com",
+]);
+app.use(cors({ origin: [...allowedOrigins], credentials: true }));
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
