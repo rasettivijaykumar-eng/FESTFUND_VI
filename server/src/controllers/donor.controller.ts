@@ -7,6 +7,7 @@ import { loadFestivalForActor } from "../services/access.service.js";
 
 const schema = z.object({
   festId: z.string().min(4),
+  submissionId: z.string().uuid().optional(),
   name: z.string().min(2, "Donor name is required"),
   mobile: z.string().min(8, "Mobile number is required"),
   email: z.string().optional().default(""),
@@ -42,7 +43,7 @@ export const listDonors = asyncHandler(async (req, res) => {
   const dir = String(req.query.dir || "desc") === "asc" ? 1 : -1;
   const allowed = new Set(["name", "amount", "date"]);
   const page = Math.max(1, Number(req.query.page || 1));
-  const limit = Math.min(100, Math.max(1, Number(req.query.limit || 20)));
+  const limit = Math.min(10000, Math.max(1, Number(req.query.limit || 20)));
   const sort = { [allowed.has(sortField) ? sortField : "date"]: dir } as Record<string, 1 | -1>;
   const [items, total] = await Promise.all([
     Donor.find(filter).sort(sort).skip((page - 1) * limit).limit(limit),
@@ -56,8 +57,27 @@ export const createDonor = asyncHandler(async (req, res) => {
   if (!parsed.success) throw new ApiError(400, parsed.error.issues[0]?.message || "Invalid input");
   const festId = parsed.data.festId.toUpperCase();
   const festival = await loadFestivalForActor(req, festId, "admin");
-  const donor = await Donor.create({ ...parsed.data, festId, festival: festival._id, createdBy: req.auth!.id });
-  res.status(201).json({ success: true, data: donor });
+  const { submissionId, ...donorData } = parsed.data;
+  if (submissionId) {
+    const existing = await Donor.findOne({ submissionId, festId });
+    if (existing) {
+      res.json({ success: true, data: existing, message: "This donor submission was already saved." });
+      return;
+    }
+  }
+  try {
+    const donor = await Donor.create({ ...donorData, submissionId, festId, festival: festival._id, createdBy: req.auth!.id });
+    res.status(201).json({ success: true, data: donor });
+  } catch (error) {
+    if (submissionId && (error as { code?: number }).code === 11000) {
+      const existing = await Donor.findOne({ submissionId, festId });
+      if (existing) {
+        res.json({ success: true, data: existing, message: "This donor submission was already saved." });
+        return;
+      }
+    }
+    throw error;
+  }
 });
 
 export const updateDonor = asyncHandler(async (req, res) => {

@@ -4,6 +4,7 @@ const schema = new mongoose.Schema(
   {
     festival: { type: mongoose.Schema.Types.ObjectId, ref: "Festival", required: true, index: true },
     festId: { type: String, required: true, index: true },
+    submissionId: { type: String, unique: true, sparse: true },
     name: { type: String, required: true, trim: true },
     mobile: { type: String, default: "" },
     email: { type: String, default: "" },

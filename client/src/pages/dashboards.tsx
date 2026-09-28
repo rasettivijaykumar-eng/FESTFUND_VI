@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -281,7 +281,7 @@ export function DonorsPage({ canEdit }: { canEdit: boolean }) {
   const [q, setQ] = useState("");
   const debounced = useDebounced(q);
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(50);
+  const [limit, setLimit] = useState(10000);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Donor | null>(null);
   const [removeId, setRemoveId] = useState<string | null>(null);
@@ -295,7 +295,10 @@ export function DonorsPage({ canEdit }: { canEdit: boolean }) {
   const blank = { name: "", mobile: "", amount: "" };
   const [form, setForm] = useState(blank);
   const [recordDate, setRecordDate] = useState(todayLocal);
-  function openNew() { setEditing(null); setForm(blank); setRecordDate(todayLocal()); setOpen(true); }
+  const [submissionId, setSubmissionId] = useState(() => crypto.randomUUID());
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  function openNew() { setEditing(null); setForm(blank); setRecordDate(todayLocal()); setSubmissionId(crypto.randomUUID()); setOpen(true); }
   function openEdit(donor: Donor) {
     setEditing(donor);
     setForm({ name: donor.name, mobile: donor.mobile || "", amount: String(donor.amount) });
@@ -303,15 +306,20 @@ export function DonorsPage({ canEdit }: { canEdit: boolean }) {
     setOpen(true);
   }
   async function save() {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     try {
-      const payload = { name: form.name, mobile: form.mobile, amount: Number(form.amount), date: recordDate, festId, category: "General" };
+      const payload = { name: form.name, mobile: form.mobile, amount: Number(form.amount), date: recordDate, festId, category: "General", ...(!editing ? { submissionId } : {}) };
       if (editing) await api.patch(`/donors/${editing._id}`, payload);
       else await api.post("/donors", payload);
       setOpen(false);
+      if (!editing) setSubmissionId(crypto.randomUUID());
       push("success", editing ? "Donor updated" : "Donor added");
       await client.invalidateQueries({ queryKey: ["donors"] });
       await client.invalidateQueries({ queryKey: ["analytics"] });
-    } catch (error) { push("error", await reportDownloadError(error)); }
+    } catch (error) { push("error", errorMessage(error)); }
+    finally { savingRef.current = false; setSaving(false); }
   }
   async function downloadReceipt(donor: Donor) {
     try {
@@ -324,7 +332,7 @@ export function DonorsPage({ canEdit }: { canEdit: boolean }) {
   async function downloadReport(type: "donors" | "expenses", format: "pdf" | "xlsx") {
     try {
       await saveBlob(`/reports/${type}`, `${type}-${festId}.${format}`, { festId, format });
-    } catch (error) { push("error", errorMessage(error)); }
+    } catch (error) { push("error", await reportDownloadError(error)); }
   }
   if (!festId) return <EmptyState title="Choose a festival" body="Create a festival before recording donors." />;
   return (
@@ -339,6 +347,7 @@ export function DonorsPage({ canEdit }: { canEdit: boolean }) {
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
         <SearchBar value={q} onChange={(value) => { setQ(value); setPage(1); }} placeholder="Search donations by donor, mobile, or category" />
         <SelectInput aria-label="Rows per page" value={limit} onChange={(event) => { setLimit(Number(event.target.value)); setPage(1); }}>
+          <option value={10000}>All records (up to 10,000)</option>
           {[20, 50, 100].map((size) => <option key={size} value={size}>{size} per page</option>)}
         </SelectInput>
       </div>
@@ -376,7 +385,7 @@ export function DonorsPage({ canEdit }: { canEdit: boolean }) {
           <Field label="Donor name"><TextInput value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
           <Field label="Mobile number"><TextInput inputMode="tel" value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} /></Field>
           <Field label="Amount"><TextInput type="number" min="1" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></Field>
-          <Button onClick={() => void save()}>Save record</Button>
+          <Button loading={saving} onClick={() => void save()}>{saving ? "Saving donor" : "Save record"}</Button>
         </div>
       </Modal>
       <ConfirmDialog open={Boolean(removeId)} title="Delete donor" body="This contribution will leave the festival totals." onClose={() => setRemoveId(null)} onConfirm={async () => {

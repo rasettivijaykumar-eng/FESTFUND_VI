@@ -8,6 +8,7 @@ export const api = axios.create({
 const apiOrigin = new URL(api.defaults.baseURL || "/api", window.location.origin).origin;
 
 function resolveUploadUrls(value: unknown): unknown {
+  if (value instanceof Blob) return value;
   if (Array.isArray(value)) return value.map(resolveUploadUrls);
   if (!value || typeof value !== "object") {
     return typeof value === "string" && value.startsWith("/uploads/")
