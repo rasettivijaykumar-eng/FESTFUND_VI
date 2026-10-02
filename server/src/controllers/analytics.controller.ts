@@ -3,6 +3,8 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { haversineKm } from "../utils/geo.js";
 import { loadFestivalForActor } from "../services/access.service.js";
 import { env } from "../config/env.js";
+import { getFinancialAdvisor } from "../services/financialAdvisor.service.js";
+import { ApiError } from "../utils/ApiError.js";
 
 async function festivalScope(reqFest: string | undefined, adminId: string, role: string, memberFest?: string) {
   if (role === "COMMITTEE") {
@@ -134,6 +136,15 @@ export const forecast = asyncHandler(async (req, res) => {
       currentExpenses,
     },
   });
+});
+
+export const financialAdvisor = asyncHandler(async (req, res) => {
+  const festId = String(req.query.festId || req.auth?.festId || "").trim().toUpperCase();
+  if (!festId) throw new ApiError(400, "Choose a festival first");
+  await loadFestivalForActor(req, festId, "read");
+  const data = await getFinancialAdvisor(festId, req.auth!.role, req.auth!.id);
+  if (!data) throw new ApiError(404, "Festival not found");
+  res.json({ success: true, data });
 });
 
 export const landingStats = asyncHandler(async (_req, res) => {

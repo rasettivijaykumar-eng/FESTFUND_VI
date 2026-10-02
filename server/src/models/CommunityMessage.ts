@@ -18,7 +18,7 @@ const communityMessageSchema = new mongoose.Schema(
     festId: { type: String, required: true },
     senderUser: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     senderName: { type: String, required: true, maxlength: 80 },
-    senderRole: { type: String, enum: ["ADMIN", "COMMITTEE", "GUEST"], required: true },
+    senderRole: { type: String, enum: ["ADMIN", "COMMITTEE", "GUEST", "SYSTEM"], required: true },
     text: { type: String, default: "", maxlength: 2000 },
     attachment: { type: attachmentSchema, default: undefined },
   },

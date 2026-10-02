@@ -9,7 +9,7 @@ import { decideRequest, listMembers, listRequests } from "../controllers/committ
 import { deleteGallery, downloadGallery, listGallery, uploadGallery } from "../controllers/gallery.controller.js";
 import { createNote, deleteNote, listNotes } from "../controllers/note.controller.js";
 import { addProduct, createAd, deleteAd, deleteProduct, getMyVendor, listAds, nearbyVendors, publicAds, updateAd, updateMyVendor, updateProduct, vendorFestivals, viewAd } from "../controllers/vendor.controller.js";
-import { analytics, forecast, landingStats, searchAll } from "../controllers/analytics.controller.js";
+import { analytics, financialAdvisor, forecast, landingStats, searchAll } from "../controllers/analytics.controller.js";
 import { createReceipt, downloadReport, listReceipts, publicDonorReceipt, publicFestivalReport, receiptPdf } from "../controllers/report.controller.js";
 import { listNotifications, markAllRead, markRead } from "../controllers/notification.controller.js";
 import { chatWithAi, chatWithPublicAi } from "../controllers/ai.controller.js";
@@ -95,6 +95,7 @@ router.delete("/advertisements/:id", requireAuth, requireRoles("VENDOR"), delete
 
 router.get("/analytics", requireAuth, requireRoles("ADMIN", "COMMITTEE"), analytics);
 router.get("/analytics/forecast", requireAuth, requireRoles("ADMIN", "COMMITTEE"), forecast);
+router.get("/analytics/financial-advisor", requireAuth, requireRoles("ADMIN", "COMMITTEE"), financialAdvisor);
 router.get("/search", requireAuth, searchAll);
 
 router.get("/receipts", requireAuth, requireRoles("ADMIN", "COMMITTEE"), listReceipts);

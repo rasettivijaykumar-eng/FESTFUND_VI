@@ -5,6 +5,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { escapeRegex } from "../utils/geo.js";
 import { loadFestivalForActor } from "../services/access.service.js";
 import { storeFile } from "../services/upload.service.js";
+import { reviewExpenseForAnomaly } from "../services/financialAdvisor.service.js";
 
 const schema = z.object({
   festId: z.string().min(4),
@@ -62,6 +63,9 @@ export const createExpense = asyncHandler(async (req, res) => {
     billUrl,
     billPublicId,
     billName,
+  });
+  void reviewExpenseForAnomaly(expense, festival).catch((error) => {
+    console.error("Automatic expense anomaly review failed:", error instanceof Error ? error.message : String(error));
   });
   res.status(201).json({ success: true, data: expense });
 });

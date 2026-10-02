@@ -15,7 +15,7 @@ type CommunityMessage = {
   _id: string;
   festId: string;
   senderName: string;
-  senderRole: "ADMIN" | "COMMITTEE" | "GUEST";
+  senderRole: "ADMIN" | "COMMITTEE" | "GUEST" | "SYSTEM";
   text: string;
   attachment?: CommunityAttachment;
   createdAt: string;
@@ -153,7 +153,7 @@ export function CommunityChat({ festId, access }: CommunityChatProps) {
             <div className="flex items-start justify-between gap-3">
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                 <span className="text-sm font-semibold text-amber-100">{message.senderName}</span>
-                <span className="text-[10px] uppercase tracking-wide text-white/45">{message.senderRole === "GUEST" ? "Unverified guest" : message.senderRole.toLowerCase()}</span>
+                <span className="text-[10px] uppercase tracking-wide text-white/45">{message.senderRole === "GUEST" ? "Unverified guest" : message.senderRole === "SYSTEM" ? "Automated notice" : message.senderRole.toLowerCase()}</span>
                 <time className="text-[10px] text-white/40" dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleString()}</time>
               </div>
               {isAdmin && <button type="button" onClick={() => void removeMessage(message._id)} className="rounded p-1 text-white/45 hover:bg-white/10 hover:text-white" aria-label="Remove message"><Trash2 className="h-3.5 w-3.5" /></button>}

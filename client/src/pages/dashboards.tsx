@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -157,7 +157,7 @@ export function CreateFestivalPage() {
   const queryClient = useQueryClient();
   const { setFestId } = useFestivalScope();
   const [form, setForm] = useState({
-    name: "", type: "Ganesh Utsav", description: "", startDate: "", endDate: "", address: "", village: "", district: "", state: "", pincode: "", latitude: "", longitude: "", contactName: "", contactMobile: "", contactEmail: "",
+    name: "", type: "Ganesh Utsav", description: "", startDate: "", endDate: "", plannedExpenseBudget: "", address: "", village: "", district: "", state: "", pincode: "", latitude: "", longitude: "", contactName: "", contactMobile: "", contactEmail: "",
   });
   const set = (key: string, value: string) => setForm((current) => ({ ...current, [key]: value }));
   async function submit() {
@@ -202,6 +202,7 @@ export function CreateFestivalPage() {
         {step === 1 && <>
           <Field label="Start date"><TextInput type="date" value={form.startDate} onChange={(e) => set("startDate", e.target.value)} /></Field>
           <Field label="End date"><TextInput type="date" value={form.endDate} onChange={(e) => set("endDate", e.target.value)} /></Field>
+          <Field label="Planned expense budget (optional)" hint="Used for AI budget alerts and forecasts"><TextInput type="number" min="0" inputMode="decimal" placeholder="e.g. 500000" value={form.plannedExpenseBudget} onChange={(e) => set("plannedExpenseBudget", e.target.value)} /></Field>
         </>}
         {step === 2 && <>
           <Field label="Address"><TextInput value={form.address} onChange={(e) => set("address", e.target.value)} /></Field>
@@ -238,16 +239,38 @@ export function CreateFestivalPage() {
 
 export function FestivalAdminDetail() {
   const { festId } = useFestivalScope();
+  const { push } = useToast();
+  const queryClient = useQueryClient();
   const id = window.location.pathname.split("/").pop() || festId;
   const query = useQuery({ queryKey: ["festival", id], queryFn: async () => (await api.get(`/festivals/${id}`)).data.data });
+  const [budget, setBudget] = useState("");
+  const [savingBudget, setSavingBudget] = useState(false);
+  useEffect(() => {
+    if (query.data) setBudget(query.data.plannedExpenseBudget == null ? "" : String(query.data.plannedExpenseBudget));
+  }, [query.data]);
   if (query.isLoading) return <Skeleton className="h-48" />;
   if (!query.data) return <EmptyState title="Festival not found" body="This Fest ID is not in your account." />;
-  const festival = query.data as { name: string; festId: string; description: string; district: string };
+  const festival = query.data as { name: string; festId: string; description: string; district: string; plannedExpenseBudget?: number };
   return (
     <div>
       <PageHeader title={festival.name} subtitle={festival.festId} action={<Link to={`/festival/${festival.festId}`}><Button>Public page</Button></Link>} />
       <p className="mt-4 max-w-2xl text-[var(--muted)]">{festival.description}</p>
       <p className="mt-2 text-sm">{festival.district}</p>
+      <form className="glass mt-5 max-w-xl space-y-3 rounded-2xl p-4" onSubmit={async (event) => {
+        event.preventDefault();
+        setSavingBudget(true);
+        try {
+          const value = budget.trim() ? Number(budget) : null;
+          const response = await api.patch(`/festivals/${festival.festId}`, { plannedExpenseBudget: value });
+          queryClient.setQueryData(["festival", id], response.data.data);
+          await queryClient.invalidateQueries({ queryKey: ["my-festivals"] });
+          push("success", value == null ? "Budget cleared" : "Budget saved");
+        } catch (error) { push("error", errorMessage(error)); }
+        finally { setSavingBudget(false); }
+      }}>
+        <Field label="Planned expense budget" hint="Optional; used for private staff alerts and AI forecasts"><TextInput type="number" min="0" inputMode="decimal" placeholder="No budget set" value={budget} onChange={(event) => setBudget(event.target.value)} /></Field>
+        <Button type="submit" loading={savingBudget}>Save budget</Button>
+      </form>
     </div>
   );
 }
@@ -752,32 +775,83 @@ export function ReceiptsPage() {
   );
 }
 
+type FinancialAdvisorData = {
+  forecast: {
+    currentContributions: number;
+    currentExpenses: number;
+    currentBalance: number;
+    estimatedContributions: number | null;
+    estimatedExpenses: number | null;
+    estimatedBalance: number | null;
+    confidence: string;
+    festivalProgress: number;
+    plannedExpenseBudget: number | null;
+    budgetStatus: string;
+  };
+  expenseByCategory: { category: string; amount: number; share: number }[];
+  expenseAlerts: { expenseId: string; category: string; amount: number; historicalMedian: number; threshold: number; ratio: number; date: string }[];
+  monthlyTrend: { month: string; contributions: number; expenses: number }[];
+  historicalFestivalsCompared: number;
+  upcomingEvents: { name: string; date: string; status: string }[];
+  insights: string;
+};
+
 export function AnalyticsPage() {
   const { festId } = useFestivalScope();
   const query = useAnalytics(festId || undefined);
-  const forecast = useQuery({
-    queryKey: ["forecast", festId],
+  const advisor = useQuery({
+    queryKey: ["financial-advisor", festId],
     enabled: Boolean(festId),
-    queryFn: async () => (await api.get("/analytics/forecast", { params: { festId } })).data.data as { mode: string; disclaimer?: string; currentContributions: number; predictedContributions?: number; currentExpenses: number; predictedExpenses?: number; predictedBalance?: number },
+    queryFn: async () => (await api.get("/analytics/financial-advisor", { params: { festId } })).data.data as FinancialAdvisorData,
   });
   if (!festId) return <EmptyState title="Choose a festival" body="Analytics follow the festival selected in the header." />;
   if (query.isLoading || !query.data) return <Skeleton className="h-64" />;
+  const estimate = (value: number | null) => value == null ? "Not enough history" : inr(value);
+  const insightLines = (advisor.data?.insights || "").split(/\r?\n/).map((line) => line.replace(/^\s*(?:[-*•]|#{1,4})\s*/, "").replace(/\*\*/g, "").trim()).filter(Boolean);
   return (
     <div>
-      <PageHeader title="Analytics" subtitle={`${festId} · recorded contributions, expenses, and events`} />
+      <PageHeader title="AI Financial Advisor" subtitle={`${festId} · verified totals, forecasts, and review alerts`} />
       <FinanceCharts data={query.data} />
-      <section className="glass mt-4 rounded-3xl p-5">
-        <div className="flex items-center gap-2"><h2 className="text-xl">Fund forecast</h2>{forecast.data?.mode === "live" && <Badge tone="green">Live model</Badge>}</div>
-        {forecast.data?.mode === "live" ? (
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <StatCard label="Predicted contributions" value={inr(forecast.data.predictedContributions || 0)} hint={`Recorded ${inr(forecast.data.currentContributions || 0)}`} />
-            <StatCard label="Predicted expenses" value={inr(forecast.data.predictedExpenses || 0)} hint={`Recorded ${inr(forecast.data.currentExpenses || 0)}`} />
-            <StatCard label="Predicted balance" value={inr(forecast.data.predictedBalance || 0)} />
+      {advisor.isLoading ? <Skeleton className="mt-4 h-72" /> : advisor.isError || !advisor.data ? (
+        <EmptyState title="Financial advisor unavailable" body="Could not load verified financial analysis for this festival." />
+      ) : <div className="mt-4 space-y-4">
+        <section className="glass rounded-2xl p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div><h2 className="text-xl">Forecast</h2><p className="text-xs text-[var(--muted)]">Estimates use this festival’s activity and your previous festivals.</p></div>
+            <Badge tone={advisor.data.forecast.confidence === "Medium" ? "green" : undefined}>{advisor.data.forecast.confidence} confidence · {advisor.data.forecast.festivalProgress}% elapsed</Badge>
           </div>
-        ) : (
-          <p className="mt-2 text-sm text-[var(--muted)]">{forecast.data?.disclaimer || "No forecast service is connected. Recorded totals are shown in the charts above."}</p>
-        )}
-      </section>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <StatCard label="Contributions to date" value={inr(advisor.data.forecast.currentContributions)} />
+            <StatCard label="Estimated final contributions" value={estimate(advisor.data.forecast.estimatedContributions)} />
+            <StatCard label="Expenses to date" value={inr(advisor.data.forecast.currentExpenses)} />
+            <StatCard label="Estimated final expenses" value={estimate(advisor.data.forecast.estimatedExpenses)} />
+            <StatCard label="Current balance" value={inr(advisor.data.forecast.currentBalance)} />
+            <StatCard label="Estimated final balance" value={estimate(advisor.data.forecast.estimatedBalance)} />
+          </div>
+          <p className="mt-3 text-xs text-[var(--muted)]">Compared with {advisor.data.historicalFestivalsCompared} historical festival{advisor.data.historicalFestivalsCompared === 1 ? "" : "s"}. Forecasts are estimates, not guarantees.</p>
+        </section>
+
+        <section className="glass rounded-2xl p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg">Budget alert</h2><p className="text-sm text-[var(--muted)]">{advisor.data.forecast.budgetStatus}</p></div>{advisor.data.forecast.plannedExpenseBudget != null && <Badge tone={advisor.data.forecast.budgetStatus.toLowerCase().includes("exceed") ? undefined : "green"}>{inr(advisor.data.forecast.plannedExpenseBudget)} planned</Badge>}</div>
+        </section>
+
+        <section className="glass rounded-2xl p-5"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg">Expense review alerts</h2><span className="text-xs text-[var(--muted)]">Pattern flags need human review; they are not evidence of wrongdoing.</span></div>
+          {advisor.data.expenseAlerts.length ? <ul className="mt-3 space-y-2">{advisor.data.expenseAlerts.map((alert) => <li key={alert.expenseId} className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-3"><div className="flex flex-wrap justify-between gap-2 text-sm"><strong>Possible unusual {alert.category} expense</strong><time className="text-[var(--muted)]">{prettyDate(alert.date)}</time></div><p className="mt-1 text-sm">{inr(alert.amount)} · Historical median {inr(alert.historicalMedian)} · {alert.ratio.toFixed(1)}× median</p><p className="mt-1 text-xs text-[var(--muted)]">Review the supporting invoice and category with the festival committee. This automated signal makes no accusation.</p></li>)}</ul> : <p className="mt-2 text-sm text-[var(--muted)]">No expenses currently exceed the historical review threshold.</p>}
+        </section>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <section className="glass rounded-2xl p-5"><h2 className="mb-3 text-lg">Expense categories</h2>
+            {advisor.data.expenseByCategory.length ? <div className="space-y-3">{advisor.data.expenseByCategory.map((item) => <div key={item.category}><div className="flex justify-between gap-3 text-sm"><span>{item.category}</span><span>{inr(item.amount)} · {Math.round(item.share * 100)}%</span></div><div className="mt-1 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-orange-500" style={{ width: `${Math.max(2, item.share * 100)}%` }} /></div></div>)}</div> : <p className="text-sm text-[var(--muted)]">No expenses recorded yet.</p>}
+          </section>
+          <section className="glass rounded-2xl p-5"><h2 className="mb-3 text-lg">Upcoming events</h2>
+            {advisor.data.upcomingEvents.length ? <ul className="space-y-2">{advisor.data.upcomingEvents.map((event) => <li key={`${event.name}-${event.date}`} className="flex justify-between gap-3 rounded-lg bg-white/5 px-3 py-2 text-sm"><span>{event.name}</span><span className="text-[var(--muted)]">{prettyDate(event.date)}</span></li>)}</ul> : <p className="text-sm text-[var(--muted)]">No upcoming events are recorded.</p>}
+          </section>
+        </div>
+
+        <section className="glass rounded-2xl p-5"><h2 className="mb-3 text-lg">Financial insight</h2>
+          {insightLines.length ? <ul className="space-y-2">{insightLines.map((line, index) => <li key={`${index}-${line}`} className="rounded-lg bg-white/5 px-3 py-2 text-sm leading-6">{line}</li>)}</ul> : <p className="text-sm text-[var(--muted)]">No additional insight is available.</p>}
+        </section>
+      </div>}
     </div>
   );
 }

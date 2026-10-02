@@ -58,6 +58,7 @@ const nav: Partial<Record<Role, NavItem[]>> = {
   ],
   COMMITTEE: [
     { to: "/committee", label: "Overview" },
+    { to: "/committee/analytics", label: "Analytics" },
     { to: "/committee/community", label: "Community Chat" },
     { to: "/committee/events", label: "Events" },
     { to: "/committee/activities", label: "Activities" },
@@ -121,6 +122,7 @@ function AnimatedRoutes() {
       <Route path="/admin/analytics" element={<Shell role="ADMIN"><AnalyticsPage /></Shell>} />
       <Route path="/admin/settings" element={<Shell role="ADMIN"><SettingsPage /></Shell>} />
       <Route path="/committee" element={<Shell role="COMMITTEE"><AdminHome /></Shell>} />
+      <Route path="/committee/analytics" element={<Shell role="COMMITTEE"><AnalyticsPage /></Shell>} />
       <Route path="/committee/community" element={<Shell role="COMMITTEE"><CommunityPage /></Shell>} />
       <Route path="/committee/events" element={<Shell role="COMMITTEE"><EventsPage canEdit /></Shell>} />
       <Route path="/committee/activities" element={<Shell role="COMMITTEE"><ActivitiesPage /></Shell>} />

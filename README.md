@@ -18,12 +18,16 @@ The official logo in `client/src/assets/festfund-logo.png` is the supplied artwo
 - Nearby vendors within 20 km, and a list fallback when Google Maps is not configured
 - Free vendor advertisements and a landing-page carousel
 - PDF, CSV and Excel reports
-- Analytics charts from recorded contributions and expenses. Forecast numbers appear only when `FORECAST_API_URL` is set
+- Analytics charts from recorded contributions and expenses
+- Admin/committee AI financial advisor with date-aware estimates, optional festival expense budgets, contribution/expense trends, category analysis, and historical comparisons where prior festivals exist
+- Expense outlier review alerts: private details go to the festival admin and approved committee; the public festival room receives only an anonymous review notice. Alerts are review signals, not accusations
 - Dark dashboards, reduced-motion preference, and responsive layouts
 
 FestFund does not take online donations, donor registrations, donor logins, or paid vendor plans.
 
 Community chat is public to anyone who knows the festival's Fest ID. Guest display names are unverified; do not post private donor or account information there. Messages and attachments are stored against that festival only.
+
+The financial advisor labels estimates with a confidence level and compares historical festival aggregates only when the admin has prior festival data. Expense anomaly alerts require at least five comparable same-category records and do not automatically imply misconduct. Budget notifications fire when spend first reaches 80% or 100% of the planned budget. Donors do not have notification accounts; their alert is a redacted notice in the public festival community chat.
 
 ## Screenshots
 

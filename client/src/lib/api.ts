@@ -55,6 +55,7 @@ export type Festival = {
   description: string;
   startDate: string;
   endDate: string;
+  plannedExpenseBudget?: number;
   address: string;
   village: string;
   district: string;

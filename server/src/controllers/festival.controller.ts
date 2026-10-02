@@ -13,6 +13,10 @@ const festivalSchema = z.object({
   description: z.string().optional().default(""),
   startDate: z.coerce.date(),
   endDate: z.coerce.date(),
+  plannedExpenseBudget: z.preprocess(
+    (value) => value === "" || value == null ? undefined : value,
+    z.coerce.number().nonnegative().optional(),
+  ),
   address: z.string().min(3, "Address is required"),
   village: z.string().min(2, "Village or town is required"),
   district: z.string().min(2, "District is required"),

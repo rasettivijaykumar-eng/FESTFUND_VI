@@ -7,6 +7,7 @@ const festivalSchema = new mongoose.Schema(
     description: { type: String, default: "" },
     startDate: { type: Date, required: true },
     endDate: { type: Date, required: true },
+    plannedExpenseBudget: { type: Number, min: 0 },
     address: { type: String, default: "" },
     village: { type: String, default: "" },
     district: { type: String, required: true },
