@@ -14,7 +14,8 @@ import { createReceipt, downloadReport, listReceipts, publicDonorReceipt, public
 import { listNotifications, markAllRead, markRead } from "../controllers/notification.controller.js";
 import { chatWithAi, chatWithPublicAi } from "../controllers/ai.controller.js";
 import { requireAuth, requireRoles } from "../middleware/auth.js";
-import { billUpload, imageUpload, mediaUpload } from "../middleware/upload.js";
+import { billUpload, communityUpload, imageUpload, mediaUpload } from "../middleware/upload.js";
+import { deleteCommunityMessage, listCommunityMessages, listPublicCommunityMessages, postCommunityMessage, postPublicCommunityMessage, publicCommunityLimiter } from "../controllers/community.controller.js";
 
 export const router = Router();
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 40, message: { success: false, message: "Too many attempts. Please wait and try again." } });
@@ -23,6 +24,8 @@ router.get("/health", (_req, res) => res.json({ success: true, data: { service: 
 router.get("/public/landing", landingStats);
 router.get("/public/festivals/:festId/donors/:donorId/receipt", publicDonorReceipt);
 router.get("/public/festivals/:festId/reports/:type", publicFestivalReport);
+router.get("/public/festivals/:festId/community/messages", listPublicCommunityMessages);
+router.post("/public/festivals/:festId/community/messages", publicCommunityLimiter, communityUpload.single("media"), postPublicCommunityMessage);
 router.get("/public/festivals/:festId", publicFestivalById);
 router.get("/public/festivals/:festId/validate", validateFestId);
 router.get("/public/vendors/nearby", nearbyVendors);
@@ -40,6 +43,9 @@ router.patch("/auth/profile", requireAuth, imageUpload.single("avatar"), updateP
 router.patch("/auth/password", requireAuth, changePassword);
 router.post("/ai/chat", requireAuth, chatWithAi);
 router.post("/ai/public/chat", chatWithPublicAi);
+router.get("/community/messages", requireAuth, requireRoles("ADMIN", "COMMITTEE"), listCommunityMessages);
+router.post("/community/messages", requireAuth, requireRoles("ADMIN", "COMMITTEE"), communityUpload.single("media"), postCommunityMessage);
+router.delete("/community/messages/:id", requireAuth, requireRoles("ADMIN", "COMMITTEE"), deleteCommunityMessage);
 
 router.post("/festivals", requireAuth, requireRoles("ADMIN"), imageUpload.single("image"), createFestival);
 router.get("/festivals", requireAuth, requireRoles("ADMIN"), listMyFestivals);

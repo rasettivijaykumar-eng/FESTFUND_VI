@@ -12,6 +12,7 @@ The official logo in `client/src/assets/festfund-logo.png` is the supplied artwo
 - Festival isolation: every donor, expense, event, gallery item, note and report is stored against one Fest ID
 - Manual contribution records, expenses with optional bills, and PDF receipts
 - Events with a month calendar
+- A separate community chat for each Fest ID, with text, image, video, and voice messages; admins and approved committee members use their accounts, while public participants appear as unverified guests
 - Photo and video gallery with original-file download
 - Committee join requests that stay locked until an admin approves them
 - Nearby vendors within 20 km, and a list fallback when Google Maps is not configured
@@ -21,6 +22,8 @@ The official logo in `client/src/assets/festfund-logo.png` is the supplied artwo
 - Dark dashboards, reduced-motion preference, and responsive layouts
 
 FestFund does not take online donations, donor registrations, donor logins, or paid vendor plans.
+
+Community chat is public to anyone who knows the festival's Fest ID. Guest display names are unverified; do not post private donor or account information there. Messages and attachments are stored against that festival only.
 
 ## Screenshots
 

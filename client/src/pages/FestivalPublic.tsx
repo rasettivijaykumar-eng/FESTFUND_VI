@@ -6,6 +6,7 @@ import { Logo } from "../components/Logo";
 import { AdCarousel } from "./AdCarousel";
 import { AnimatedNumber, Badge, Button, EmptyState, SearchBar, Skeleton, Tabs, useDebounced } from "../components/ui";
 import { FestFundAI } from "../components/FestFundAI";
+import { CommunityChat } from "../components/CommunityChat";
 import { api, errorMessage, inr, prettyDate, type Ad, type Donor, type Expense, type FestEvent, type GalleryItem } from "../lib/api";
 import { useToast } from "../context/AppState";
 
@@ -107,7 +108,7 @@ export default function FestivalPublic() {
           <article className="glass rounded-3xl p-5"><p className="text-xs text-[var(--muted)]">Balance</p><p className="mt-2 text-3xl"><AnimatedNumber value={finance.balance} format={inr} /></p></article>
         </div>
         <div className="mt-8">
-          <Tabs value={tab} onChange={setTab} tabs={["Overview", "Donors", "Expenses", "Events", "Photos", "Videos", "Committee", "Reports", "Nearby Vendors"].map((label) => ({ id: label.toLowerCase().replace(" ", "-"), label }))} />
+          <Tabs value={tab} onChange={setTab} tabs={["Overview", "Donors", "Expenses", "Events", "Photos", "Videos", "Committee", "Community Chat", "Reports", "Nearby Vendors"].map((label) => ({ id: label.toLowerCase().replace(" ", "-"), label }))} />
           {tab === "overview" && <>
             <p className="max-w-3xl leading-7 text-white/80">{festival.description}</p>
             <section className="glass mt-5 max-w-xl rounded-2xl p-4">
@@ -134,6 +135,7 @@ export default function FestivalPublic() {
             {visibleExpenses.length ? <RecordList rows={visibleExpenses.map((e) => `${e.description} · ${e.category} · ${inr(e.amount)} · ${prettyDate(e.date)}`)} /> : <EmptyState title={query.data.expenses.length ? "No expenses match your search." : "No expenses yet."} body={query.data.expenses.length ? "Try another description or category." : "Spending will appear here once the admin records it."} />}
           </div>}
           {tab === "events" && <EventList events={query.data.events} />}
+          {tab === "community-chat" && <CommunityChat festId={festival.festId} access="public" />}
           {tab === "photos" && <MediaGrid items={photos} onOpen={setLightbox} />}
           {tab === "videos" && <MediaGrid items={videos} onOpen={setLightbox} />}
           {tab === "committee" && (query.data.committee.length ? <RecordList rows={query.data.committee.map((m) => m.name)} /> : <EmptyState title="Committee list is empty." body="Approved members will be listed here." />)}

@@ -8,6 +8,7 @@ import { useAuth, useMotionPref } from "./context/AppState";
 import type { Role } from "./lib/api";
 import { LoginPage, AdminRegister, CommitteeRegister, VendorRegister } from "./pages/AuthPages";
 import { EnterFestPage } from "./pages/AdCarousel";
+import { CommunityPage } from "./pages/CommunityPage";
 import {
   AdminHome, AdsAdminPage, AnalyticsPage, CommitteeQueue, CreateFestivalPage, DonorsPage, EventsPage,
   ExpensesPage, FestivalAdminDetail, FestivalsPage, GalleryPage, MembersPage, NearbyPage, NotesPage,
@@ -38,6 +39,7 @@ function Guard({ role, children }: { role: Role; children: ReactNode }) {
 const nav: Partial<Record<Role, NavItem[]>> = {
   ADMIN: [
     { to: "/admin", label: "Dashboard" },
+    { to: "/admin/community", label: "Community Chat" },
     { to: "/admin/festivals", label: "My Festivals" },
     { to: "/admin/festivals/create", label: "Create Festival" },
     { to: "/admin/committee", label: "Committee Requests" },
@@ -56,6 +58,7 @@ const nav: Partial<Record<Role, NavItem[]>> = {
   ],
   COMMITTEE: [
     { to: "/committee", label: "Overview" },
+    { to: "/committee/community", label: "Community Chat" },
     { to: "/committee/events", label: "Events" },
     { to: "/committee/activities", label: "Activities" },
     { to: "/committee/donors", label: "Donors" },
@@ -101,6 +104,7 @@ function AnimatedRoutes() {
       <Route path="/register/committee" element={<CommitteeRegister />} />
       <Route path="/register/vendor" element={<VendorRegister />} />
       <Route path="/admin" element={<Shell role="ADMIN"><AdminHome /></Shell>} />
+      <Route path="/admin/community" element={<Shell role="ADMIN"><CommunityPage /></Shell>} />
       <Route path="/admin/festivals" element={<Shell role="ADMIN"><FestivalsPage /></Shell>} />
       <Route path="/admin/festivals/create" element={<Shell role="ADMIN"><CreateFestivalPage /></Shell>} />
       <Route path="/admin/festivals/:festId" element={<Shell role="ADMIN"><FestivalAdminDetail /></Shell>} />
@@ -117,6 +121,7 @@ function AnimatedRoutes() {
       <Route path="/admin/analytics" element={<Shell role="ADMIN"><AnalyticsPage /></Shell>} />
       <Route path="/admin/settings" element={<Shell role="ADMIN"><SettingsPage /></Shell>} />
       <Route path="/committee" element={<Shell role="COMMITTEE"><AdminHome /></Shell>} />
+      <Route path="/committee/community" element={<Shell role="COMMITTEE"><CommunityPage /></Shell>} />
       <Route path="/committee/events" element={<Shell role="COMMITTEE"><EventsPage canEdit /></Shell>} />
       <Route path="/committee/activities" element={<Shell role="COMMITTEE"><ActivitiesPage /></Shell>} />
       <Route path="/committee/donors" element={<Shell role="COMMITTEE"><DonorsPage canEdit={false} /></Shell>} />

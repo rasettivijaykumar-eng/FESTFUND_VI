@@ -12,4 +12,5 @@ export { Vendor } from "./Vendor.js";
 export { Advertisement } from "./Advertisement.js";
 export { Receipt } from "./Receipt.js";
 export { Notification } from "./Notification.js";
+export { CommunityMessage } from "./CommunityMessage.js";
 export { Counter, nextSeq } from "./Counter.js";
