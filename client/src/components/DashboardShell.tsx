@@ -4,6 +4,7 @@ import { Bell, Menu, Search } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Logo } from "./Logo";
 import { Drawer, SearchBar } from "./ui";
+import { FestFundAI } from "./FestFundAI";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AppState";
 import { useFestivalScope } from "../hooks/useFestivalScope";
@@ -112,6 +113,7 @@ export function DashboardShell({ items, children }: { items: NavItem[]; children
         <button onClick={() => setOpen(true)}>More</button>
       </nav>
       <Drawer open={open} onClose={() => setOpen(false)}>{sidebar}</Drawer>
+      {user?.role !== "VENDOR" && <FestFundAI festivalId={scope.festId} festivalName={scope.current?.name} role={user?.role === "ADMIN" || user?.role === "COMMITTEE" ? user.role : "VISITOR"} />}
     </div>
   );
 }

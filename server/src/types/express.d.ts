@@ -1,4 +1,4 @@
-export type Role = "ADMIN" | "COMMITTEE" | "VENDOR";
+export type Role = "ADMIN" | "COMMITTEE" | "VENDOR" | "VISITOR";
 
 declare global {
   namespace Express {

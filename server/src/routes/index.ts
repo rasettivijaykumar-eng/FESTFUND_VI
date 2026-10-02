@@ -12,6 +12,7 @@ import { addProduct, createAd, deleteAd, deleteProduct, getMyVendor, listAds, ne
 import { analytics, forecast, landingStats, searchAll } from "../controllers/analytics.controller.js";
 import { createReceipt, downloadReport, listReceipts, publicDonorReceipt, publicFestivalReport, receiptPdf } from "../controllers/report.controller.js";
 import { listNotifications, markAllRead, markRead } from "../controllers/notification.controller.js";
+import { chatWithAi, chatWithPublicAi } from "../controllers/ai.controller.js";
 import { requireAuth, requireRoles } from "../middleware/auth.js";
 import { billUpload, imageUpload, mediaUpload } from "../middleware/upload.js";
 
@@ -37,6 +38,8 @@ router.post("/auth/logout", logout);
 router.get("/auth/me", requireAuth, me);
 router.patch("/auth/profile", requireAuth, imageUpload.single("avatar"), updateProfile);
 router.patch("/auth/password", requireAuth, changePassword);
+router.post("/ai/chat", requireAuth, chatWithAi);
+router.post("/ai/public/chat", chatWithPublicAi);
 
 router.post("/festivals", requireAuth, requireRoles("ADMIN"), imageUpload.single("image"), createFestival);
 router.get("/festivals", requireAuth, requireRoles("ADMIN"), listMyFestivals);

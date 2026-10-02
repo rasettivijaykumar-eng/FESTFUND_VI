@@ -35,7 +35,7 @@ function Guard({ role, children }: { role: Role; children: ReactNode }) {
   return <FestivalScopeProvider>{children}</FestivalScopeProvider>;
 }
 
-const nav: Record<Role, NavItem[]> = {
+const nav: Partial<Record<Role, NavItem[]>> = {
   ADMIN: [
     { to: "/admin", label: "Dashboard" },
     { to: "/admin/festivals", label: "My Festivals" },
@@ -82,7 +82,8 @@ const nav: Record<Role, NavItem[]> = {
 };
 
 function Shell({ role, children }: { role: Role; children: ReactNode }) {
-  return <Guard role={role}><DashboardShell items={nav[role]}>{children}</DashboardShell></Guard>;
+  const items = nav[role] || [];
+  return <Guard role={role}><DashboardShell items={items}>{children}</DashboardShell></Guard>;
 }
 
 function AnimatedRoutes() {

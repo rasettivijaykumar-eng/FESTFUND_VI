@@ -33,7 +33,7 @@ export function errorMessage(error: unknown) {
   return "Something went wrong";
 }
 
-export type Role = "ADMIN" | "COMMITTEE" | "VENDOR";
+export type Role = "ADMIN" | "COMMITTEE" | "VENDOR" | "VISITOR";
 
 export type Account = {
   _id: string;

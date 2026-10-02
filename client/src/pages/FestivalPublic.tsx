@@ -5,6 +5,7 @@ import { MapPin } from "lucide-react";
 import { Logo } from "../components/Logo";
 import { AdCarousel } from "./AdCarousel";
 import { AnimatedNumber, Badge, Button, EmptyState, SearchBar, Skeleton, Tabs, useDebounced } from "../components/ui";
+import { FestFundAI } from "../components/FestFundAI";
 import { api, errorMessage, inr, prettyDate, type Ad, type Donor, type Expense, type FestEvent, type GalleryItem } from "../lib/api";
 import { useToast } from "../context/AppState";
 
@@ -196,6 +197,7 @@ export default function FestivalPublic() {
           </div>
         </div>
       )}
+      <FestFundAI festivalId={festId} festivalName={festival.name} role="VISITOR" publicVisitor />
     </div>
   );
 }

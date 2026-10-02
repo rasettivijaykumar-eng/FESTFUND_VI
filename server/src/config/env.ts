@@ -18,6 +18,7 @@ export const env = {
     apiSecret: process.env.CLOUDINARY_API_SECRET || "",
   },
   googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || "",
+  geminiApiKey: process.env.GEMINI_API_KEY || "",
   forecastApiUrl: process.env.FORECAST_API_URL || "",
 };
 
