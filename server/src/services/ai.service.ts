@@ -244,6 +244,7 @@ export async function answerFestivalQuestion(input: {
   ].join("\n");
 
   if (!env.geminiApiKey) {
+    console.error("FestFund AI request skipped: GEMINI_API_KEY is missing.");
     return {
       answer: "FestFund AI is temporarily unavailable. Your FestFund dashboard is still working normally.",
     };
@@ -251,13 +252,28 @@ export async function answerFestivalQuestion(input: {
 
   try {
     const ai = new GoogleGenAI({ apiKey: env.geminiApiKey });
-    const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents: prompt,
-    });
+    let response;
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        response = await ai.models.generateContent({
+          model: "gemini-3.5-flash-lite",
+          contents: prompt,
+        });
+        break;
+      } catch (error) {
+        const status = error && typeof error === "object" && "status" in error
+          ? Number(error.status)
+          : 0;
+        if (![429, 500, 502, 503, 504].includes(status) || attempt >= 2) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
+      }
+    }
     const answer = (response.text || "I could not generate a response for that request.").trim();
     return { answer };
-  } catch {
+  } catch (error) {
+    const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    const safeDetail = env.geminiApiKey ? detail.replaceAll(env.geminiApiKey, "[redacted]") : detail;
+    console.error("FestFund AI Gemini request failed:", safeDetail);
     return {
       answer: "FestFund AI is temporarily unavailable. Your FestFund dashboard is still working normally.",
     };
