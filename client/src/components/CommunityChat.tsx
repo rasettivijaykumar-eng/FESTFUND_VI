@@ -1,4 +1,4 @@
-import { ImagePlus, LoaderCircle, Mic, Send, Square, Trash2, X } from "lucide-react";
+import { ArrowDown, ImagePlus, LoaderCircle, Mic, Send, Square, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../lib/api";
@@ -36,10 +36,15 @@ export function CommunityChat({ festId, access }: CommunityChatProps) {
   const [file, setFile] = useState<File | null>(null);
   const [recording, setRecording] = useState(false);
   const [sending, setSending] = useState(false);
+  const [newMessageCount, setNewMessageCount] = useState(0);
   const [error, setError] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const thread = useRef<HTMLDivElement>(null);
   const recorder = useRef<MediaRecorder | null>(null);
+  const isPinnedToBottom = useRef(true);
+  const hasInitializedScroll = useRef(false);
+  const forceScrollToBottom = useRef(false);
+  const previousMessageIds = useRef<string[]>([]);
 
   const messages = useQuery({
     queryKey: ["community-messages", festId, access],
@@ -55,7 +60,37 @@ export function CommunityChat({ festId, access }: CommunityChatProps) {
   });
 
   useEffect(() => {
-    if (thread.current) thread.current.scrollTop = thread.current.scrollHeight;
+    hasInitializedScroll.current = false;
+    previousMessageIds.current = [];
+    isPinnedToBottom.current = true;
+    setNewMessageCount(0);
+  }, [festId, access]);
+
+  useEffect(() => {
+    const element = thread.current;
+    const currentMessages = messages.data;
+    if (!element || !currentMessages) return;
+
+    const currentIds = currentMessages.map((message) => message._id);
+    if (!hasInitializedScroll.current) {
+      hasInitializedScroll.current = true;
+      previousMessageIds.current = currentIds;
+      element.scrollTop = element.scrollHeight;
+      return;
+    }
+
+    const previousIds = new Set(previousMessageIds.current);
+    const appendedMessages = currentMessages.filter((message) => !previousIds.has(message._id)).length;
+    previousMessageIds.current = currentIds;
+
+    if (forceScrollToBottom.current || isPinnedToBottom.current) {
+      element.scrollTo({ top: element.scrollHeight, behavior: forceScrollToBottom.current ? "smooth" : "auto" });
+      isPinnedToBottom.current = true;
+      setNewMessageCount(0);
+    } else if (appendedMessages > 0) {
+      setNewMessageCount((count) => count + appendedMessages);
+    }
+    forceScrollToBottom.current = false;
   }, [messages.data]);
 
   useEffect(() => () => {
@@ -80,6 +115,8 @@ export function CommunityChat({ festId, access }: CommunityChatProps) {
       await api.post(path, body);
       setText("");
       setFile(null);
+      forceScrollToBottom.current = true;
+      isPinnedToBottom.current = true;
       if (fileInput.current) fileInput.current.value = "";
       await queryClient.invalidateQueries({ queryKey: ["community-messages", festId, access] });
     } catch (sendError) {
@@ -133,6 +170,21 @@ export function CommunityChat({ festId, access }: CommunityChatProps) {
   }
 
   const isAdmin = access === "member" && user?.role === "ADMIN";
+  function handleThreadScroll() {
+    const element = thread.current;
+    if (!element) return;
+    isPinnedToBottom.current = element.scrollHeight - element.clientHeight - element.scrollTop < 64;
+    if (isPinnedToBottom.current) setNewMessageCount(0);
+  }
+  function jumpToLatest() {
+    if (!thread.current) return;
+    isPinnedToBottom.current = true;
+    setNewMessageCount(0);
+    thread.current.scrollTo({ top: thread.current.scrollHeight, behavior: "smooth" });
+  }
+  function keepLatestVisible() {
+    if (isPinnedToBottom.current && thread.current) thread.current.scrollTop = thread.current.scrollHeight;
+  }
 
   return (
     <section className="glass overflow-hidden rounded-2xl border border-white/10" aria-label="Festival community chat">
@@ -144,26 +196,29 @@ export function CommunityChat({ festId, access }: CommunityChatProps) {
         {access === "public" && <span className="rounded-full bg-amber-500/10 px-3 py-1 text-xs text-amber-100">Guests are unverified</span>}
       </header>
 
-      <div ref={thread} role="log" aria-live="polite" aria-label="Community messages" className="max-h-[min(58vh,560px)] min-h-64 space-y-3 overflow-y-auto px-4 py-4">
-        {messages.isLoading && <p className="text-sm text-white/60">Loading festival messages…</p>}
-        {messages.isError && <p className="text-sm text-red-200">Could not load messages. They will retry automatically.</p>}
-        {messages.data?.length === 0 && <p className="py-10 text-center text-sm text-white/60">No messages yet. Start the conversation with the festival community.</p>}
-        {messages.data?.map((message) => (
-          <article key={message._id} className="max-w-3xl rounded-xl bg-white/[0.045] px-3 py-2.5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <span className="text-sm font-semibold text-amber-100">{message.senderName}</span>
-                <span className="text-[10px] uppercase tracking-wide text-white/45">{message.senderRole === "GUEST" ? "Unverified guest" : message.senderRole === "SYSTEM" ? "Automated notice" : message.senderRole.toLowerCase()}</span>
-                <time className="text-[10px] text-white/40" dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleString()}</time>
+      <div className="relative">
+        <div ref={thread} onScroll={handleThreadScroll} role="log" aria-live="polite" aria-label="Community messages" className="max-h-[min(58vh,560px)] min-h-64 space-y-3 overflow-y-auto px-4 py-4">
+          {messages.isLoading && <p className="text-sm text-white/60">Loading festival messages…</p>}
+          {messages.isError && <p className="text-sm text-red-200">Could not load messages. They will retry automatically.</p>}
+          {messages.data?.length === 0 && <p className="py-10 text-center text-sm text-white/60">No messages yet. Start the conversation with the festival community.</p>}
+          {messages.data?.map((message) => (
+            <article key={message._id} className="max-w-3xl rounded-xl bg-white/[0.045] px-3 py-2.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="text-sm font-semibold text-amber-100">{message.senderName}</span>
+                  <span className="text-[10px] uppercase tracking-wide text-white/45">{message.senderRole === "GUEST" ? "Unverified guest" : message.senderRole === "SYSTEM" ? "Automated notice" : message.senderRole.toLowerCase()}</span>
+                  <time className="text-[10px] text-white/40" dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleString()}</time>
+                </div>
+                {isAdmin && <button type="button" onClick={() => void removeMessage(message._id)} className="rounded p-1 text-white/45 hover:bg-white/10 hover:text-white" aria-label="Remove message"><Trash2 className="h-3.5 w-3.5" /></button>}
               </div>
-              {isAdmin && <button type="button" onClick={() => void removeMessage(message._id)} className="rounded p-1 text-white/45 hover:bg-white/10 hover:text-white" aria-label="Remove message"><Trash2 className="h-3.5 w-3.5" /></button>}
-            </div>
-            {message.text && <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-white/85">{message.text}</p>}
-            {message.attachment?.kind === "image" && <img src={message.attachment.url} alt={message.attachment.originalName || "Community image"} loading="lazy" className="mt-2 max-h-80 max-w-full rounded-lg object-contain" />}
-            {message.attachment?.kind === "video" && <video src={message.attachment.url} controls preload="metadata" className="mt-2 max-h-80 max-w-full rounded-lg" />}
-            {message.attachment?.kind === "audio" && <audio src={message.attachment.url} controls preload="metadata" className="mt-2 w-full max-w-md" />}
-          </article>
-        ))}
+              {message.text && <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-white/85">{message.text}</p>}
+              {message.attachment?.kind === "image" && <img onLoad={keepLatestVisible} src={message.attachment.url} alt={message.attachment.originalName || "Community image"} loading="lazy" className="mt-2 max-h-80 max-w-full rounded-lg object-contain" />}
+              {message.attachment?.kind === "video" && <video onLoadedMetadata={keepLatestVisible} src={message.attachment.url} controls preload="metadata" className="mt-2 max-h-80 max-w-full rounded-lg" />}
+              {message.attachment?.kind === "audio" && <audio onLoadedMetadata={keepLatestVisible} src={message.attachment.url} controls preload="metadata" className="mt-2 w-full max-w-md" />}
+            </article>
+          ))}
+        </div>
+        {newMessageCount > 0 && <button type="button" onClick={jumpToLatest} className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-orange-300/30 bg-[#21130c] px-4 py-2 text-xs text-amber-100 shadow-lg hover:bg-[#321b0f]" aria-label={`Jump to ${newMessageCount} new ${newMessageCount === 1 ? "message" : "messages"}`}><ArrowDown className="h-4 w-4" />{newMessageCount} new {newMessageCount === 1 ? "message" : "messages"}</button>}
       </div>
 
       <form onSubmit={(event) => void sendMessage(event)} className="border-t border-white/10 bg-black/10 p-3">
