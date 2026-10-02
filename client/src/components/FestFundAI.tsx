@@ -5,7 +5,7 @@ import { api, errorMessage } from "../lib/api";
 import { useAuth } from "../context/AppState";
 
 type Message = { role: "assistant" | "user"; text: string };
-type MessageBlock = { type: "paragraph" | "unordered" | "ordered"; lines: string[] };
+type MessageBlock = { type: "paragraph" | "heading" | "unordered" | "ordered"; lines: string[] };
 
 function renderInlineText(text: string) {
   return text.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
@@ -18,17 +18,21 @@ function renderInlineText(text: string) {
 function AssistantMessage({ text }: { text: string }) {
   const blocks: MessageBlock[] = [];
   for (const line of text.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)) {
+    const heading = line.match(/^#{1,3}\s+(.*)$/);
     const unordered = line.match(/^[-*•]\s+(.*)$/);
     const ordered = line.match(/^\d+[.)]\s+(.*)$/);
-    const type = unordered ? "unordered" : ordered ? "ordered" : "paragraph";
-    const content = unordered?.[1] || ordered?.[1] || line;
+    const type = heading ? "heading" : unordered ? "unordered" : ordered ? "ordered" : "paragraph";
+    const content = heading?.[1] || unordered?.[1] || ordered?.[1] || line;
     const previous = blocks[blocks.length - 1];
-    if (previous?.type === type) previous.lines.push(content);
+    if (type !== "heading" && previous?.type === type) previous.lines.push(content);
     else blocks.push({ type, lines: [content] });
   }
 
   return <div className="space-y-1">
     {blocks.map((block, index) => {
+      if (block.type === "heading") {
+        return <h4 key={index} className="pt-2 font-semibold text-orange-100">{renderInlineText(block.lines[0])}</h4>;
+      }
       if (block.type === "unordered") {
         return <ul key={index} className="list-disc space-y-1 pl-5 marker:text-orange-300">
           {block.lines.map((line, itemIndex) => <li key={itemIndex} className="pl-1">{renderInlineText(line)}</li>)}
@@ -73,9 +77,12 @@ export function FestFundAI({ festivalId, festivalName, role, publicVisitor = fal
   const greeting = useMemo(() => {
     const name = user?.name || (effectiveRole === "VISITOR" ? "Festival Visitor" : "there");
     if (publicVisitor || effectiveRole === "VISITOR") {
-      return `Welcome to ${festivalName || "this festival"}! 👋 I'm your FestFund AI assistant. What would you like to know about this festival?`;
+      return `Hi! I'm FestFund AI for ${festivalName || "this festival"}. I can help with festival details, events, the gallery, and nearby vendors. Ask for a festival summary or choose a topic below.`;
     }
-    return `Hello ${name}! 👋 I'm FestFund AI. You're currently managing ${festivalName || effectiveFestId || "your festival"}. How can I help?`;
+    const topics = effectiveRole === "ADMIN"
+      ? "finances, donors, expenses, events, vendors, and festival summaries"
+      : "finances, events, committee activities, and vendors";
+    return `Hi ${name}! I'm FestFund AI for ${festivalName || effectiveFestId || "your festival"}. I can help with ${topics}. Ask for a full summary or choose a topic below.`;
   }, [effectiveFestId, effectiveRole, festivalName, publicVisitor, user?.name]);
 
   const send = async (value: string) => {
