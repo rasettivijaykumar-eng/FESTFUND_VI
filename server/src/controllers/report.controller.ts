@@ -3,10 +3,10 @@ import path from "node:path";
 import PDFDocument from "pdfkit";
 import ExcelJS from "exceljs";
 import { Donor, Expense, Festival, Receipt } from "../models/index.js";
-import { nextSeq } from "../models/Counter.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { loadFestivalForActor } from "../services/access.service.js";
+import { getOrCreateReceipt } from "../services/receipt.service.js";
 
 function logoPath() {
   const candidate = path.resolve(process.cwd(), "assets", "festfund-logo.png");
@@ -28,23 +28,7 @@ export const createReceipt = asyncHandler(async (req, res) => {
   const donor = await Donor.findById(req.body.donorId);
   if (!donor) throw new ApiError(404, "Donor record not found");
   const festival = await loadFestivalForActor(req, donor.festId, "read");
-  let receipt = await Receipt.findOne({ donor: donor._id });
-  if (!receipt) {
-    const seq = await nextSeq("receipt");
-    receipt = await Receipt.create({
-      receiptNo: `FF-${String(seq).padStart(5, "0")}`,
-      donor: donor._id,
-      festival: festival._id,
-      festId: festival.festId,
-      festivalName: festival.name,
-      donorName: donor.name,
-      adminName: festival.contactName,
-      adminMobile: festival.contactMobile,
-      amount: donor.amount,
-      contributionDate: donor.date,
-      category: donor.category,
-    });
-  }
+  const receipt = await getOrCreateReceipt(donor, festival);
   res.status(201).json({ success: true, data: receipt });
 });
 
@@ -101,23 +85,7 @@ export const publicDonorReceipt = asyncHandler(async (req, res) => {
   if (!festival) throw new ApiError(404, "Fest ID not found");
   const donor = await Donor.findOne({ _id: req.params.donorId, festId });
   if (!donor) throw new ApiError(404, "Donor record not found");
-  let receipt = await Receipt.findOne({ donor: donor._id });
-  if (!receipt) {
-    const seq = await nextSeq("receipt");
-    receipt = await Receipt.create({
-      receiptNo: `FF-${String(seq).padStart(5, "0")}`,
-      donor: donor._id,
-      festival: festival._id,
-      festId: festival.festId,
-      festivalName: festival.name,
-      donorName: donor.name,
-      adminName: festival.contactName,
-      adminMobile: festival.contactMobile,
-      amount: donor.amount,
-      contributionDate: donor.date,
-      category: donor.category,
-    });
-  }
+  const receipt = await getOrCreateReceipt(donor, festival);
   sendReceiptPdf(res, { ...receipt.toObject(), adminName: receipt.adminName || festival.contactName, adminMobile: receipt.adminMobile || festival.contactMobile }, false);
 });
 

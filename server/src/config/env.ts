@@ -19,6 +19,18 @@ export const env = {
   },
   googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || "",
   geminiApiKey: process.env.GEMINI_API_KEY || "",
+  whatsapp: {
+    accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
+    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
+    businessAccountId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "",
+    apiVersion: process.env.WHATSAPP_API_VERSION || "",
+    appSecret: process.env.WHATSAPP_APP_SECRET || "",
+    verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || "",
+    templateName: process.env.WHATSAPP_DONATION_TEMPLATE_NAME || "",
+    templateLanguage: process.env.WHATSAPP_TEMPLATE_LANGUAGE || "en",
+    businessPhone: process.env.WHATSAPP_BUSINESS_PHONE || "",
+  },
+  festfundPublicUrl: process.env.FESTFUND_PUBLIC_URL || "http://localhost:5173",
   forecastApiUrl: process.env.FORECAST_API_URL || "",
 };
 

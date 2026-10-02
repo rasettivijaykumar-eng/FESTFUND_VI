@@ -82,6 +82,17 @@ export type Donor = {
   date: string;
   category: string;
   notes?: string;
+  receiptNo?: string;
+  whatsappNotification?: {
+    status: "sent" | "delivered" | "read" | "pending" | "not_configured" | "no_number" | "failed" | "not_available";
+    recipient?: string;
+    messageId?: string;
+    sentAt?: string;
+    deliveredAt?: string;
+    readAt?: string;
+    failureReason?: string;
+    lastAttemptAt?: string;
+  };
 };
 
 export type Expense = {

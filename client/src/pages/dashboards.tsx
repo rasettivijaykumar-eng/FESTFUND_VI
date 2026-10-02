@@ -297,6 +297,22 @@ async function reportDownloadError(error: unknown) {
   return errorMessage(error);
 }
 
+type WhatsAppDeliveryStatus = NonNullable<Donor["whatsappNotification"]>["status"];
+
+function whatsAppStatusLabel(status?: WhatsAppDeliveryStatus) {
+  const labels: Record<WhatsAppDeliveryStatus, string> = {
+    sent: "Sent",
+    delivered: "Delivered",
+    read: "Read",
+    pending: "Pending delivery",
+    not_configured: "Not configured",
+    no_number: "No number",
+    failed: "Failed",
+    not_available: "Not available on WhatsApp",
+  };
+  return status ? labels[status] : labels.not_configured;
+}
+
 export function DonorsPage({ canEdit }: { canEdit: boolean }) {
   const { festId } = useFestivalScope();
   const { push } = useToast();
@@ -308,13 +324,20 @@ export function DonorsPage({ canEdit }: { canEdit: boolean }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Donor | null>(null);
   const [removeId, setRemoveId] = useState<string | null>(null);
+  const [savedContribution, setSavedContribution] = useState<Donor | null>(null);
   const query = useQuery({
     queryKey: ["donors", festId, debounced, page, limit],
     enabled: Boolean(festId),
     queryFn: async () => (await api.get("/donors", { params: { festId, q: debounced, page, limit, sort: "date", dir: "desc" } })).data as { data: Donor[]; meta: { page: number; limit: number; total: number } },
+    refetchInterval: (current) => current.state.data?.data.some((donor) => donor.whatsappNotification?.status === "pending") ? 5000 : false,
   });
   const donors = query.data?.data || [];
   const totalDonors = query.data?.meta.total || 0;
+  useEffect(() => {
+    if (!savedContribution) return;
+    const latest = donors.find((donor) => donor._id === savedContribution._id);
+    if (latest) setSavedContribution((current) => current ? { ...current, whatsappNotification: latest.whatsappNotification } : current);
+  }, [donors, savedContribution?._id]);
   const blank = { name: "", mobile: "", amount: "" };
   const [form, setForm] = useState(blank);
   const [recordDate, setRecordDate] = useState(todayLocal);
@@ -334,11 +357,18 @@ export function DonorsPage({ canEdit }: { canEdit: boolean }) {
     setSaving(true);
     try {
       const payload = { name: form.name, mobile: form.mobile, amount: Number(form.amount), date: recordDate, festId, category: "General", ...(!editing ? { submissionId } : {}) };
+      let created: Donor | null = null;
       if (editing) await api.patch(`/donors/${editing._id}`, payload);
-      else await api.post("/donors", payload);
+      else {
+        const response = await api.post("/donors", payload);
+        created = response.data.data as Donor;
+      }
       setOpen(false);
       if (!editing) setSubmissionId(crypto.randomUUID());
-      push("success", editing ? "Donor updated" : "Donor added");
+      if (created) {
+        setSavedContribution(created);
+        push("success", `Contribution recorded · WhatsApp ${whatsAppStatusLabel(created.whatsappNotification?.status)}`);
+      } else push("success", "Donor updated");
       await client.invalidateQueries({ queryKey: ["donors"] });
       await client.invalidateQueries({ queryKey: ["analytics"] });
     } catch (error) { push("error", errorMessage(error)); }
@@ -351,6 +381,15 @@ export function DonorsPage({ canEdit }: { canEdit: boolean }) {
       await saveBlob(`/receipts/${receipt._id}/pdf`, `${receipt.receiptNo}.pdf`);
       push("success", `Receipt ${receipt.receiptNo} downloaded`);
     } catch (error) { push("error", await reportDownloadError(error)); }
+  }
+  async function resendWhatsApp(donor: Donor) {
+    try {
+      const response = await api.post(`/donors/${donor._id}/whatsapp/resend`, { festId });
+      const notification = response.data.data.whatsappNotification as Donor["whatsappNotification"];
+      if (savedContribution?._id === donor._id) setSavedContribution({ ...savedContribution, whatsappNotification: notification });
+      push("success", `WhatsApp status: ${whatsAppStatusLabel(notification?.status)}`);
+      await client.invalidateQueries({ queryKey: ["donors"] });
+    } catch (error) { push("error", errorMessage(error)); }
   }
   async function downloadReport(type: "donors" | "expenses", format: "pdf" | "xlsx") {
     try {
@@ -384,17 +423,20 @@ export function DonorsPage({ canEdit }: { canEdit: boolean }) {
           </div>
         </div>
         <div className="mt-2 overflow-auto">
-          <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="text-[var(--muted)]"><tr><th className="py-2">Name</th><th>Mobile</th><th>Amount</th><th>Date</th><th>Receipt</th>{canEdit && <th>Actions</th>}</tr></thead>
+          <table className="w-full min-w-[900px] text-left text-sm">
+            <thead className="text-[var(--muted)]"><tr><th className="py-2">Name</th><th>Mobile / WhatsApp</th><th>Amount</th><th>Date</th><th>Receipt</th>{canEdit && <><th>WhatsApp status</th><th>Actions</th></>}</tr></thead>
             <tbody>
               {donors.map((donor) => (
                 <tr key={donor._id} className="border-t border-white/10">
                   <td className="py-3">{donor.name}</td>
-                  <td>{donor.mobile}</td>
+                  <td>{donor.mobile || "—"}</td>
                   <td>{inr(donor.amount)}</td>
                   <td>{prettyDate(donor.date)}</td>
                   <td><button className="underline" onClick={() => void downloadReceipt(donor)}>Download receipt</button></td>
-                  {canEdit && <td className="space-x-2"><button className="underline" onClick={() => openEdit(donor)}>Edit</button><button className="underline" onClick={() => setRemoveId(donor._id)}>Delete</button></td>}
+                  {canEdit && <>
+                    <td><details className="text-xs"><summary className="cursor-pointer underline">{whatsAppStatusLabel(donor.whatsappNotification?.status)}</summary><div className="mt-1 max-w-64 space-y-1 text-[var(--muted)]">{donor.whatsappNotification?.recipient && <p>Recipient: {donor.whatsappNotification.recipient}</p>}{donor.whatsappNotification?.sentAt && <p>Sent: {new Date(donor.whatsappNotification.sentAt).toLocaleString()}</p>}{donor.whatsappNotification?.deliveredAt && <p>Delivered: {new Date(donor.whatsappNotification.deliveredAt).toLocaleString()}</p>}{donor.whatsappNotification?.readAt && <p>Read: {new Date(donor.whatsappNotification.readAt).toLocaleString()}</p>}{donor.whatsappNotification?.messageId && <p className="break-all">Message ID: {donor.whatsappNotification.messageId}</p>}{donor.whatsappNotification?.failureReason && <p>{donor.whatsappNotification.failureReason}</p>}</div></details></td>
+                    <td className="space-x-2"><button className="underline" onClick={() => openEdit(donor)}>Edit</button><button className="underline" onClick={() => setRemoveId(donor._id)}>Delete</button>{donor.mobile && !["sent", "delivered", "read", "pending"].includes(donor.whatsappNotification?.status || "") && <button className="underline" onClick={() => void resendWhatsApp(donor)}>Resend WhatsApp</button>}</td>
+                  </>}
                 </tr>
               ))}
             </tbody>
@@ -406,10 +448,21 @@ export function DonorsPage({ canEdit }: { canEdit: boolean }) {
         <div className="grid gap-3">
           <p className="text-sm text-white/70">{festId} · {prettyDate(recordDate)}</p>
           <Field label="Donor name"><TextInput value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
-          <Field label="Mobile number"><TextInput inputMode="tel" value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} /></Field>
+          <Field label="Mobile / WhatsApp Number (Optional)"><TextInput inputMode="tel" placeholder="+91 9876543210" value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} /></Field>
           <Field label="Amount"><TextInput type="number" min="1" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></Field>
           <Button loading={saving} onClick={() => void save()}>{saving ? "Saving donor" : "Save record"}</Button>
         </div>
+      </Modal>
+      <Modal open={Boolean(savedContribution)} title="Contribution recorded successfully" onClose={() => setSavedContribution(null)}>
+        {savedContribution && <div className="grid gap-3 text-sm">
+          <p><span className="text-white/60">Donor:</span> {savedContribution.name}</p>
+          <p><span className="text-white/60">Amount:</span> {inr(savedContribution.amount)}</p>
+          <p><span className="text-white/60">Fest ID:</span> {festId}</p>
+          <p><span className="text-white/60">Receipt:</span> {savedContribution.receiptNo || "Generated when you view the receipt"}</p>
+          <p><span className="text-white/60">WhatsApp notification:</span> {whatsAppStatusLabel(savedContribution.whatsappNotification?.status)}</p>
+          {savedContribution.whatsappNotification?.failureReason && <p className="text-xs text-amber-100">{savedContribution.whatsappNotification.failureReason}</p>}
+          <div className="flex flex-wrap gap-2"><Button onClick={() => void downloadReceipt(savedContribution)}>View receipt</Button>{savedContribution.mobile && !["sent", "delivered", "read", "pending"].includes(savedContribution.whatsappNotification?.status || "") && <Button variant="ghost" onClick={() => void resendWhatsApp(savedContribution)}>Resend WhatsApp</Button>}<Button variant="ghost" onClick={() => setSavedContribution(null)}>Close</Button></div>
+        </div>}
       </Modal>
       <ConfirmDialog open={Boolean(removeId)} title="Delete donor" body="This contribution will leave the festival totals." onClose={() => setRemoveId(null)} onConfirm={async () => {
         if (!removeId) return;
@@ -873,6 +926,7 @@ export function SettingsPage() {
         <Field label="Profile image"><FileInput id="avatar" accept="image/jpeg,image/png,image/webp" /></Field>
         <Button type="submit">Save profile</Button>
       </form>
+      {user?.role === "ADMIN" && <WhatsAppSettingsPanel />}
       <form className="glass space-y-3 rounded-3xl p-5" onSubmit={async (e) => { e.preventDefault(); try { await api.patch("/auth/password", { currentPassword, newPassword }); push("success", "Password updated"); setCurrentPassword(""); setNewPassword(""); } catch (error) { push("error", errorMessage(error)); } }}>
         <Field label="Current password"><TextInput type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} /></Field>
         <Field label="New password"><TextInput type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /></Field>
@@ -885,6 +939,70 @@ export function SettingsPage() {
         <Button variant="danger" onClick={() => void logout().then(() => { window.location.href = "/"; })}>Log out</Button>
       </div>
     </div>
+  );
+}
+
+type WhatsAppSettingsData = {
+  enabled: boolean;
+  configured: boolean;
+  status: "connected" | "not_tested" | "not_configured";
+  businessPhoneNumber: string;
+  businessName: string;
+  verifiedAt: string | null;
+  lastTestFailure: string;
+  templateName: string;
+  templateLanguage: string;
+};
+
+function WhatsAppSettingsPanel() {
+  const { push } = useToast();
+  const client = useQueryClient();
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const query = useQuery({
+    queryKey: ["whatsapp-settings"],
+    queryFn: async () => (await api.get("/whatsapp/settings")).data.data as WhatsAppSettingsData,
+  });
+
+  async function setEnabled(enabled: boolean) {
+    setSaving(true);
+    try {
+      await api.patch("/whatsapp/settings", { enabled });
+      await client.invalidateQueries({ queryKey: ["whatsapp-settings"] });
+      push("success", enabled ? "WhatsApp notifications enabled" : "WhatsApp notifications disabled");
+    } catch (error) { push("error", errorMessage(error)); }
+    finally { setSaving(false); }
+  }
+
+  async function testConnection() {
+    setTesting(true);
+    try {
+      await api.post("/whatsapp/settings/test");
+      await client.invalidateQueries({ queryKey: ["whatsapp-settings"] });
+      push("success", "WhatsApp Cloud API connection verified");
+    } catch (error) { push("error", errorMessage(error)); }
+    finally { setTesting(false); }
+  }
+
+  const settings = query.data;
+  const status = settings?.status === "connected" ? "Connected" : settings?.status === "not_tested" ? "Configured · test required" : "Not configured";
+  return (
+    <section className="glass space-y-4 rounded-3xl p-5" aria-label="WhatsApp notifications">
+      <div>
+        <h2 className="text-lg font-semibold">WhatsApp Notifications</h2>
+        <p className="text-sm text-[var(--muted)]">Optional donation receipts use the official WhatsApp Business Cloud API. Contributions are saved even if a message cannot be sent.</p>
+      </div>
+      {query.isLoading ? <Skeleton className="h-24" /> : query.isError ? <p role="alert" className="text-sm text-rose-200">WhatsApp settings could not be loaded.</p> : <>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white/5 px-4 py-3">
+          <div><p className="text-sm">Status</p><p className={`text-sm ${settings?.status === "connected" ? "text-emerald-300" : "text-amber-200"}`}>{status}</p></div>
+          <div className="text-right"><p className="text-xs text-[var(--muted)]">Business phone</p><p className="text-sm">{settings?.businessPhoneNumber || "Not verified"}</p>{settings?.businessName && <p className="text-xs text-[var(--muted)]">{settings.businessName}</p>}</div>
+        </div>
+        {settings?.lastTestFailure && <p role="alert" className="text-xs text-rose-200">{settings.lastTestFailure}</p>}
+        <label className="flex items-center justify-between gap-3 text-sm">Enable WhatsApp notifications<input type="checkbox" checked={Boolean(settings?.enabled)} disabled={!settings?.configured || settings?.status !== "connected" || saving} onChange={(event) => void setEnabled(event.target.checked)} /></label>
+        <div className="flex flex-wrap items-center gap-3"><Button loading={testing} disabled={!settings?.configured} onClick={() => void testConnection()}>Test Configuration</Button><span className="text-xs text-[var(--muted)]">API credentials and the approved template are configured only in the backend environment.</span></div>
+        {settings?.templateName && <p className="text-xs text-[var(--muted)]">Template: {settings.templateName} · {settings.templateLanguage}</p>}
+      </>}
+    </section>
   );
 }
 

@@ -24,6 +24,26 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_BUSINESS_ACCOUNT_ID
+        sync: false
+      - key: WHATSAPP_API_VERSION
+        sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+      - key: WHATSAPP_DONATION_TEMPLATE_NAME
+        value: festfund_donation_receipt
+      - key: WHATSAPP_TEMPLATE_LANGUAGE
+        value: en
+      - key: WHATSAPP_BUSINESS_PHONE
+        sync: false
+      - key: FESTFUND_PUBLIC_URL
+        value: https://festfund-vi-1.onrender.com
 
   - type: web
     name: festfund-web

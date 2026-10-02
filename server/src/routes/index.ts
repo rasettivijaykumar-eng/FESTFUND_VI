@@ -16,11 +16,15 @@ import { chatWithAi, chatWithPublicAi } from "../controllers/ai.controller.js";
 import { requireAuth, requireRoles } from "../middleware/auth.js";
 import { billUpload, communityUpload, imageUpload, mediaUpload } from "../middleware/upload.js";
 import { deleteCommunityMessage, listCommunityMessages, listPublicCommunityMessages, postCommunityMessage, postPublicCommunityMessage, publicCommunityLimiter } from "../controllers/community.controller.js";
+import { getWhatsAppSettings, receiveWhatsAppWebhook, resendDonationWhatsApp, testWhatsAppSettings, updateWhatsAppSettings, verifyWhatsAppWebhook } from "../controllers/whatsapp.controller.js";
 
 export const router = Router();
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 40, message: { success: false, message: "Too many attempts. Please wait and try again." } });
+const whatsappResendLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false });
 
 router.get("/health", (_req, res) => res.json({ success: true, data: { service: "festfund" } }));
+router.get("/whatsapp/webhook", verifyWhatsAppWebhook);
+router.post("/whatsapp/webhook", receiveWhatsAppWebhook);
 router.get("/public/landing", landingStats);
 router.get("/public/festivals/:festId/donors/:donorId/receipt", publicDonorReceipt);
 router.get("/public/festivals/:festId/reports/:type", publicFestivalReport);
@@ -41,6 +45,10 @@ router.post("/auth/logout", logout);
 router.get("/auth/me", requireAuth, me);
 router.patch("/auth/profile", requireAuth, imageUpload.single("avatar"), updateProfile);
 router.patch("/auth/password", requireAuth, changePassword);
+router.get("/whatsapp/settings", requireAuth, requireRoles("ADMIN"), getWhatsAppSettings);
+router.patch("/whatsapp/settings", requireAuth, requireRoles("ADMIN"), updateWhatsAppSettings);
+router.post("/whatsapp/settings/test", requireAuth, requireRoles("ADMIN"), whatsappResendLimiter, testWhatsAppSettings);
+router.post("/donors/:id/whatsapp/resend", requireAuth, requireRoles("ADMIN"), whatsappResendLimiter, resendDonationWhatsApp);
 router.post("/ai/chat", requireAuth, chatWithAi);
 router.post("/ai/public/chat", chatWithPublicAi);
 router.get("/community/messages", requireAuth, requireRoles("ADMIN", "COMMITTEE"), listCommunityMessages);

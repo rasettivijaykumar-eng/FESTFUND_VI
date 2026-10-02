@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
+    "test": "tsx --test tests/whatsapp.integration.test.ts",
     "start": "node dist/server.js"
   },
   "dependencies": {
@@ -20,6 +21,7 @@
     "express-rate-limit": "^8.1.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
+    "libphonenumber-js": "^1.13.14",
     "mongoose": "^8.18.0",
     "multer": "^2.0.2",
     "pdfkit": "^0.17.2",

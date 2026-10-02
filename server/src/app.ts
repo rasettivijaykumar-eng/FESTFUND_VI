@@ -17,7 +17,13 @@ const allowedOrigins = new Set([
 	"https://festfund-vi-1.onrender.com",
 ]);
 app.use(cors({ origin: [...allowedOrigins], credentials: true }));
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({
+	limit: "2mb",
+	verify: (req, _res, buffer) => {
+		const request = req as import("express").Request;
+		if (request.originalUrl.split("?")[0] === "/api/whatsapp/webhook") request.rawBody = Buffer.from(buffer);
+	},
+}));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));

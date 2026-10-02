@@ -4,12 +4,15 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { escapeRegex } from "../utils/geo.js";
 import { loadFestivalForActor } from "../services/access.service.js";
+import { sendDonationReceipt } from "../services/whatsapp.service.js";
+import { notify } from "../services/notification.service.js";
+import { getOrCreateReceipt } from "../services/receipt.service.js";
 
 const schema = z.object({
   festId: z.string().min(4),
   submissionId: z.string().uuid().optional(),
   name: z.string().min(2, "Donor name is required"),
-  mobile: z.string().min(8, "Mobile number is required"),
+  mobile: z.string().trim().max(40).optional().default(""),
   email: z.string().optional().default(""),
   address: z.string().optional().default(""),
   amount: z.coerce.number().positive("Contribution amount must be greater than zero"),
@@ -67,7 +70,28 @@ export const createDonor = asyncHandler(async (req, res) => {
   }
   try {
     const donor = await Donor.create({ ...donorData, submissionId, festId, festival: festival._id, createdBy: req.auth!.id });
-    res.status(201).json({ success: true, data: donor });
+    let receiptNo = "";
+    try {
+      receiptNo = (await getOrCreateReceipt(donor, festival)).receiptNo;
+    } catch (error) {
+      console.error("Receipt creation failed after contribution save:", error instanceof Error ? error.name : "UnknownError");
+    }
+    try {
+      const result = await sendDonationReceipt(donor, festival, req.auth!.id);
+      receiptNo = result.receiptNo || receiptNo;
+    } catch (error) {
+      console.error("WhatsApp notification failed after contribution save:", error instanceof Error ? error.name : "UnknownError");
+      await Donor.updateOne({ _id: donor._id, festId }, {
+        $set: {
+          "whatsappNotification.status": "failed",
+          "whatsappNotification.failureReason": "WhatsApp sending could not be completed. The contribution remains recorded.",
+          "whatsappNotification.lastAttemptAt": new Date(),
+        },
+      }).catch(() => undefined);
+      await notify(req.auth!.id, "WhatsApp receipt failed", "The contribution was saved, but WhatsApp sending could not be completed.", "whatsapp", "/admin/donors").catch(() => undefined);
+    }
+    const updatedDonor = await Donor.findById(donor._id).catch(() => donor);
+    res.status(201).json({ success: true, data: { ...(updatedDonor || donor).toObject(), receiptNo } });
   } catch (error) {
     if (submissionId && (error as { code?: number }).code === 11000) {
       const existing = await Donor.findOne({ submissionId, festId });

@@ -11,6 +11,7 @@ The official logo in `client/src/assets/festfund-logo.png` is the supplied artwo
 - Admin, committee and vendor accounts, plus visitors who only enter a Fest ID
 - Festival isolation: every donor, expense, event, gallery item, note and report is stored against one Fest ID
 - Manual contribution records, expenses with optional bills, and PDF receipts
+- Optional WhatsApp Cloud API donation receipts with per-contribution delivery status and resend
 - Events with a month calendar
 - A separate community chat for each Fest ID, with text, image, video, and voice messages; admins and approved committee members use their accounts, while public participants appear as unverified guests
 - Photo and video gallery with original-file download
@@ -111,6 +112,16 @@ CLOUDINARY_API_SECRET=
 GOOGLE_MAPS_API_KEY=
 CLIENT_URL=http://localhost:5173
 GEMINI_API_KEY=
+WHATSAPP_ACCESS_TOKEN=
+WHATSAPP_PHONE_NUMBER_ID=
+WHATSAPP_BUSINESS_ACCOUNT_ID=
+WHATSAPP_API_VERSION=
+WHATSAPP_APP_SECRET=
+WHATSAPP_VERIFY_TOKEN=
+WHATSAPP_DONATION_TEMPLATE_NAME=festfund_donation_receipt
+WHATSAPP_TEMPLATE_LANGUAGE=en
+WHATSAPP_BUSINESS_PHONE=
+FESTFUND_PUBLIC_URL=http://localhost:5173
 FORECAST_API_URL=
 SEED_DEMO=false
 ```
@@ -128,6 +139,16 @@ If `MONGODB_URI` is empty outside production, the API starts an empty in-memory 
 1. Create a Cloudinary account and copy the cloud name, API key and API secret into the server environment.
 2. Uploaded photos, videos and bills are stored without extra transformations so a download can return the original file.
 3. If those variables are empty, files are saved under `server/uploads` and served from `/uploads`.
+
+## WhatsApp donation receipts
+
+WhatsApp is optional. The donor contribution is saved before any Cloud API request; missing credentials, an empty/invalid mobile, timeouts, rejected templates, or delivery failures only update the notification status. Admins enable sending under **Settings → WhatsApp Notifications** after **Test Configuration** succeeds. Committee accounts cannot configure or resend receipts.
+
+Configure these variables only on the backend service (`server/.env` locally or Render `festfund-api`): `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_BUSINESS_ACCOUNT_ID`, `WHATSAPP_API_VERSION`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_DONATION_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANGUAGE`, and `FESTFUND_PUBLIC_URL`. Never put tokens or app secrets in Vite/client variables. Set `WHATSAPP_BUSINESS_PHONE` only if you want a fallback display number before the API test returns the verified number.
+
+Create and have Meta approve a Utility template whose body parameters, in order, are donor name, formatted amount, festival name, Fest ID, receipt number, and festival URL. The default template name is `festfund_donation_receipt`; match its language code to `WHATSAPP_TEMPLATE_LANGUAGE`. Configure the Meta webhook callback as `https://festfund-api.onrender.com/api/whatsapp/webhook`, use the same `WHATSAPP_VERIFY_TOKEN`, and subscribe the app to the `messages` field. The webhook signature is checked with `WHATSAPP_APP_SECRET` before delivery statuses update donor records. An API-accepted message remains **Pending** until Meta reports `sent`, `delivered`, or `read`; recipient-unavailable webhook errors become **Not available**.
+
+The receipt link uses the existing public route: `FESTFUND_PUBLIC_URL/festival/<FestID>`. Set `FESTFUND_PUBLIC_URL` to the public frontend origin, for example `https://festfund-vi-1.onrender.com`.
 
 ## Google Maps
 

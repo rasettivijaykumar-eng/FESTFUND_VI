@@ -3,6 +3,7 @@ export type Role = "ADMIN" | "COMMITTEE" | "VENDOR" | "VISITOR";
 declare global {
   namespace Express {
     interface Request {
+      rawBody?: Buffer;
       auth?: {
         id: string;
         role: Role;
