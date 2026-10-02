@@ -5,6 +5,44 @@ import { api, errorMessage } from "../lib/api";
 import { useAuth } from "../context/AppState";
 
 type Message = { role: "assistant" | "user"; text: string };
+type MessageBlock = { type: "paragraph" | "unordered" | "ordered"; lines: string[] };
+
+function renderInlineText(text: string) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
+    part.startsWith("**") && part.endsWith("**")
+      ? <strong key={index} className="font-semibold text-white">{part.slice(2, -2)}</strong>
+      : part,
+  );
+}
+
+function AssistantMessage({ text }: { text: string }) {
+  const blocks: MessageBlock[] = [];
+  for (const line of text.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)) {
+    const unordered = line.match(/^[-*•]\s+(.*)$/);
+    const ordered = line.match(/^\d+[.)]\s+(.*)$/);
+    const type = unordered ? "unordered" : ordered ? "ordered" : "paragraph";
+    const content = unordered?.[1] || ordered?.[1] || line;
+    const previous = blocks[blocks.length - 1];
+    if (previous?.type === type) previous.lines.push(content);
+    else blocks.push({ type, lines: [content] });
+  }
+
+  return <div className="space-y-1">
+    {blocks.map((block, index) => {
+      if (block.type === "unordered") {
+        return <ul key={index} className="list-disc space-y-1 pl-5 marker:text-orange-300">
+          {block.lines.map((line, itemIndex) => <li key={itemIndex} className="pl-1">{renderInlineText(line)}</li>)}
+        </ul>;
+      }
+      if (block.type === "ordered") {
+        return <ol key={index} className="list-decimal space-y-1 pl-5 marker:text-orange-300">
+          {block.lines.map((line, itemIndex) => <li key={itemIndex} className="pl-1">{renderInlineText(line)}</li>)}
+        </ol>;
+      }
+      return <p key={index}>{renderInlineText(block.lines.join(" "))}</p>;
+    })}
+  </div>;
+}
 
 type FestFundAIProps = {
   festivalId?: string;
@@ -134,8 +172,10 @@ export function FestFundAI({ festivalId, festivalName, role, publicVisitor = fal
             <div className="max-h-[420px] space-y-3 overflow-y-auto px-4 py-4">
               {(messages.length ? messages : [{ role: "assistant", text: greeting }]).map((message, index) => (
                 <div key={`${message.role}-${index}`} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-6 ${message.role === "user" ? "bg-gradient-to-r from-[#FF8A00] to-[#E65100] text-white" : "bg-white/5 text-white/85"}`}>
-                    {message.text || (loading ? "● ● ●" : "")}
+                  <div className={`max-w-[92%] rounded-2xl px-3 py-2 text-sm leading-6 ${message.role === "user" ? "bg-gradient-to-r from-[#FF8A00] to-[#E65100] text-white" : "bg-white/5 text-white/85"}`}>
+                    {message.role === "assistant" ? (
+                      <AssistantMessage text={message.text || (loading ? "● ● ●" : "")} />
+                    ) : message.text}
                   </div>
                 </div>
               ))}
