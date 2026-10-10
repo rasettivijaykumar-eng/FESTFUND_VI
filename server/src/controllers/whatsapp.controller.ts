@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { Donor, Festival, WhatsAppSettings } from "../models/index.js";
 import { loadFestivalForActor } from "../services/access.service.js";
@@ -50,7 +49,7 @@ export const updateWhatsAppSettings = asyncHandler(async (req, res) => {
   const settings = await getAdminSettings(req.auth!.id);
   const configVerified = settings.verifiedAt && settings.verifiedConfigFingerprint === getWhatsAppConfigFingerprint();
   if (parsed.data.enabled && (!isWhatsAppConfigured() || !configVerified)) {
-    throw new ApiError(400, "Test the WhatsApp Cloud API configuration successfully before enabling notifications");
+    throw new ApiError(400, "Test the Twilio WhatsApp configuration successfully before enabling notifications");
   }
   settings.enabled = parsed.data.enabled;
   await settings.save();
@@ -99,19 +98,21 @@ export const verifyWhatsAppWebhook = asyncHandler(async (req, res) => {
   const token = String(req.query["hub.verify_token"] || "");
   const challenge = String(req.query["hub.challenge"] || "");
   const expected = env.whatsapp.verifyToken;
-  const tokenBuffer = Buffer.from(token);
-  const expectedBuffer = Buffer.from(expected);
-  const validToken = Boolean(expected) && tokenBuffer.length === expectedBuffer.length && timingSafeEqual(tokenBuffer, expectedBuffer);
-  if (mode !== "subscribe" || !validToken || !challenge) {
-    res.sendStatus(403);
+  if (mode === "subscribe" && expected && token === expected && challenge) {
+    res.status(200).type("text/plain").send(challenge);
     return;
   }
-  res.status(200).type("text/plain").send(challenge);
+  if (!mode && !token && !challenge) {
+    res.status(200).type("text/plain").send("ok");
+    return;
+  }
+  res.sendStatus(403);
 });
 
 export const receiveWhatsAppWebhook = asyncHandler(async (req, res) => {
-  const signature = req.header("x-hub-signature-256");
-  if (!verifyWhatsAppWebhookSignature(req.rawBody, signature)) {
+  const signature = req.header("x-twilio-signature");
+  const fullUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+  if (!verifyWhatsAppWebhookSignature(req.rawBody, signature, fullUrl, req.body || {})) {
     res.sendStatus(401);
     return;
   }

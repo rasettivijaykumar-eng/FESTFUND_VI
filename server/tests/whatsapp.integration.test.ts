@@ -13,6 +13,8 @@ process.env.WHATSAPP_VERIFY_TOKEN = "test-verify-token";
 process.env.WHATSAPP_DONATION_TEMPLATE_NAME = "festfund_donation_receipt";
 process.env.WHATSAPP_TEMPLATE_LANGUAGE = "en";
 process.env.FESTFUND_PUBLIC_URL = "https://festfund.example.test";
+// These tests cover the legacy Meta path; keep local Twilio credentials from switching providers.
+for (const key of ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_WHATSAPP_FROM", "TWILIO_WHATSAPP_CONTENT_SID", "TWILIO_STATUS_CALLBACK_URL", "WHATSAPP_BUSINESS_PHONE"]) process.env[key] = "";
 
 type Handler = (req: any, res: any, next: (error?: unknown) => void) => unknown;
 

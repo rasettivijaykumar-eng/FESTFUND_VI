@@ -11,7 +11,7 @@ The official logo in `client/src/assets/festfund-logo.png` is the supplied artwo
 - Admin, committee and vendor accounts, plus visitors who only enter a Fest ID
 - Festival isolation: every donor, expense, event, gallery item, note and report is stored against one Fest ID
 - Manual contribution records, expenses with optional bills, and PDF receipts
-- Optional WhatsApp Cloud API donation receipts with per-contribution delivery status and resend
+- Optional Twilio WhatsApp donation receipts with per-contribution delivery status and resend
 - Events with a month calendar
 - A separate community chat for each Fest ID, with text, image, video, and voice messages; admins and approved committee members use their accounts, while public participants appear as unverified guests
 - Photo and video gallery with original-file download
@@ -112,15 +112,14 @@ CLOUDINARY_API_SECRET=
 GOOGLE_MAPS_API_KEY=
 CLIENT_URL=http://localhost:5173
 GEMINI_API_KEY=
-WHATSAPP_ACCESS_TOKEN=
-WHATSAPP_PHONE_NUMBER_ID=
-WHATSAPP_BUSINESS_ACCOUNT_ID=
-WHATSAPP_API_VERSION=
-WHATSAPP_APP_SECRET=
-WHATSAPP_VERIFY_TOKEN=
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+TWILIO_WHATSAPP_CONTENT_SID=
+TWILIO_STATUS_CALLBACK_URL=https://your-public-api.example.com/api/whatsapp/webhook
 WHATSAPP_DONATION_TEMPLATE_NAME=festfund_donation_receipt
 WHATSAPP_TEMPLATE_LANGUAGE=en
-WHATSAPP_BUSINESS_PHONE=
+WHATSAPP_BUSINESS_PHONE=whatsapp:+14155238886
 FESTFUND_PUBLIC_URL=http://localhost:5173
 FORECAST_API_URL=
 SEED_DEMO=false
@@ -142,11 +141,11 @@ If `MONGODB_URI` is empty outside production, the API starts an empty in-memory 
 
 ## WhatsApp donation receipts
 
-WhatsApp is optional. The donor contribution is saved before any Cloud API request; missing credentials, an empty/invalid mobile, timeouts, rejected templates, or delivery failures only update the notification status. Admins enable sending under **Settings → WhatsApp Notifications** after **Test Configuration** succeeds. Committee accounts cannot configure or resend receipts.
+WhatsApp is optional. The donor contribution is saved before any Twilio API request; missing credentials, an empty/invalid mobile, timeouts, rejected templates, or delivery failures only update the notification status. Admins enable sending under **Settings → WhatsApp Notifications** after **Test Configuration** succeeds. Committee accounts cannot configure or resend receipts.
 
-Configure these variables only on the backend service (`server/.env` locally or Render `festfund-api`): `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_BUSINESS_ACCOUNT_ID`, `WHATSAPP_API_VERSION`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_DONATION_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANGUAGE`, and `FESTFUND_PUBLIC_URL`. Never put tokens or app secrets in Vite/client variables. Set `WHATSAPP_BUSINESS_PHONE` only if you want a fallback display number before the API test returns the verified number.
+Configure these variables only on the backend service (`server/.env` locally or Render `festfund-api`): `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_FROM`, `TWILIO_WHATSAPP_CONTENT_SID`, `TWILIO_STATUS_CALLBACK_URL`, `WHATSAPP_DONATION_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANGUAGE`, and `FESTFUND_PUBLIC_URL`. Never put tokens or app secrets in Vite/client variables. Set `WHATSAPP_BUSINESS_PHONE` only if you want a fallback display number before the API test returns the verified sender.
 
-Create and have Meta approve a Utility template whose body parameters, in order, are donor name, formatted amount, festival name, Fest ID, receipt number, and festival URL. The default template name is `festfund_donation_receipt`; match its language code to `WHATSAPP_TEMPLATE_LANGUAGE`. Configure the Meta webhook callback as `https://festfund-api.onrender.com/api/whatsapp/webhook`, use the same `WHATSAPP_VERIFY_TOKEN`, and subscribe the app to the `messages` field. The webhook signature is checked with `WHATSAPP_APP_SECRET` before delivery statuses update donor records. An API-accepted message remains **Pending** until Meta reports `sent`, `delivered`, or `read`; recipient-unavailable webhook errors become **Not available**.
+Twilio supports a sandbox or a production WhatsApp sender. For sandbox testing, send to the sandbox number with the approved message format and use `whatsapp:+14155238886` as the sender in `TWILIO_WHATSAPP_FROM`. In production, use an approved Content SID or a plain-text body if the business is allowed to send a free-form message. The notification payload includes donor name, formatted amount, festival name, Fest ID, receipt number, and festival URL in that order. The default template name is `festfund_donation_receipt`; match its language code to `WHATSAPP_TEMPLATE_LANGUAGE` when a content template is used. Configure the Twilio webhook callback as `https://your-public-api.example.com/api/whatsapp/webhook` by setting `TWILIO_STATUS_CALLBACK_URL`, and validate the request signature with Twilio's `x-twilio-signature` header before updating donor records. An API-accepted message remains **Pending** until Twilio reports `sent`, `delivered`, or `read`; unavailable recipients or failed delivery are recorded as **Not available** or **Failed**.
 
 The receipt link uses the existing public route: `FESTFUND_PUBLIC_URL/festival/<FestID>`. Set `FESTFUND_PUBLIC_URL` to the public frontend origin, for example `https://festfund-vi-1.onrender.com`.
 

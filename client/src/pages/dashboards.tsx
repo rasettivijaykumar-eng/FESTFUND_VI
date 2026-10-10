@@ -979,7 +979,7 @@ function WhatsAppSettingsPanel() {
     try {
       await api.post("/whatsapp/settings/test");
       await client.invalidateQueries({ queryKey: ["whatsapp-settings"] });
-      push("success", "WhatsApp Cloud API connection verified");
+      push("success", "Twilio WhatsApp connection verified");
     } catch (error) { push("error", errorMessage(error)); }
     finally { setTesting(false); }
   }
@@ -990,7 +990,7 @@ function WhatsAppSettingsPanel() {
     <section className="glass space-y-4 rounded-3xl p-5" aria-label="WhatsApp notifications">
       <div>
         <h2 className="text-lg font-semibold">WhatsApp Notifications</h2>
-        <p className="text-sm text-[var(--muted)]">Optional donation receipts use the official WhatsApp Business Cloud API. Contributions are saved even if a message cannot be sent.</p>
+        <p className="text-sm text-[var(--muted)]">Optional donation receipts use the official Twilio WhatsApp API. Contributions are saved even if a message cannot be sent.</p>
       </div>
       {query.isLoading ? <Skeleton className="h-24" /> : query.isError ? <p role="alert" className="text-sm text-rose-200">WhatsApp settings could not be loaded.</p> : <>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white/5 px-4 py-3">
