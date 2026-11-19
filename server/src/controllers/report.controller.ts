@@ -5,7 +5,7 @@ import ExcelJS from "exceljs";
 import { Donor, Expense, Festival, Receipt } from "../models/index.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
-import { loadFestivalForActor } from "../services/access.service.js";
+import { getFestivalOwnedRecord, loadFestivalForActor } from "../services/access.service.js";
 import { getOrCreateReceipt } from "../services/receipt.service.js";
 
 function logoPath() {
@@ -25,17 +25,16 @@ export const listReceipts = asyncHandler(async (req, res) => {
 });
 
 export const createReceipt = asyncHandler(async (req, res) => {
-  const donor = await Donor.findById(req.body.donorId);
-  if (!donor) throw new ApiError(404, "Donor record not found");
+  const donor = await getFestivalOwnedRecord(req, Donor, req.body.donorId, "read");
   const festival = await loadFestivalForActor(req, donor.festId, "read");
   const receipt = await getOrCreateReceipt(donor, festival);
   res.status(201).json({ success: true, data: receipt });
 });
 
 export const receiptPdf = asyncHandler(async (req, res) => {
-  const receipt = await Receipt.findById(req.params.id);
-  if (!receipt) throw new ApiError(404, "Receipt not found");
+  const receipt = await getFestivalOwnedRecord(req, Receipt, req.params.id, "read");
   const festival = await loadFestivalForActor(req, receipt.festId, "read");
+  res.setHeader("Cache-Control", "private, no-store");
   sendReceiptPdf(res, { ...receipt.toObject(), adminName: receipt.adminName || festival.contactName, adminMobile: receipt.adminMobile || festival.contactMobile }, req.query.inline === "1");
 });
 
@@ -86,6 +85,7 @@ export const publicDonorReceipt = asyncHandler(async (req, res) => {
   const donor = await Donor.findOne({ _id: req.params.donorId, festId });
   if (!donor) throw new ApiError(404, "Donor record not found");
   const receipt = await getOrCreateReceipt(donor, festival);
+  res.setHeader("Cache-Control", "private, no-store");
   sendReceiptPdf(res, { ...receipt.toObject(), adminName: receipt.adminName || festival.contactName, adminMobile: receipt.adminMobile || festival.contactMobile }, false);
 });
 

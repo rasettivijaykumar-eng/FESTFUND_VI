@@ -14,6 +14,9 @@ const whatsappNotificationSchema = new mongoose.Schema(
     readAt: { type: Date },
     failureReason: { type: String, default: "" },
     lastAttemptAt: { type: Date },
+    idempotencyKey: { type: String, default: "", index: true },
+    retryCount: { type: Number, default: 0, min: 0 },
+    nextRetryAt: { type: Date },
   },
   { _id: false },
 );

@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { CommunityMessage, Festival } from "../models/index.js";
-import { loadFestivalForActor } from "../services/access.service.js";
+import { getFestivalOwnedRecord, loadFestivalForActor } from "../services/access.service.js";
 import { storeFile } from "../services/upload.service.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -110,9 +110,7 @@ export const postPublicCommunityMessage = asyncHandler(async (req, res) => {
 });
 
 export const deleteCommunityMessage = asyncHandler(async (req, res) => {
-  const message = await CommunityMessage.findById(req.params.id);
-  if (!message) throw new ApiError(404, "Community message not found");
-  await loadFestivalForActor(req, message.festId, "manage");
+  const message = await getFestivalOwnedRecord(req, CommunityMessage, req.params.id, "manage");
   if (req.auth?.role !== "ADMIN" && String(message.senderUser || "") !== req.auth?.id) {
     throw new ApiError(403, "You can remove only your own messages");
   }

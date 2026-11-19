@@ -2,7 +2,7 @@ import { z } from "zod";
 import { CommitteeMember, CommitteeRequest, User } from "../models/index.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
-import { loadFestivalForActor } from "../services/access.service.js";
+import { getFestivalOwnedRecord, loadFestivalForActor } from "../services/access.service.js";
 import { notify } from "../services/notification.service.js";
 
 export const listRequests = asyncHandler(async (req, res) => {
@@ -19,9 +19,7 @@ export const decideRequest = asyncHandler(async (req, res) => {
   const schema = z.object({ status: z.enum(["approved", "rejected"]) });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) throw new ApiError(400, "Choose approve or reject");
-  const request = await CommitteeRequest.findById(req.params.id);
-  if (!request) throw new ApiError(404, "Request not found");
-  await loadFestivalForActor(req, request.festId, "admin");
+  const request = await getFestivalOwnedRecord(req, CommitteeRequest, req.params.id, "admin");
   if (request.status !== "pending") throw new ApiError(400, "This request was already reviewed");
   request.status = parsed.data.status;
   await request.save();

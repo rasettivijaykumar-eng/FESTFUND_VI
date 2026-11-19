@@ -3,11 +3,11 @@ import rateLimit from "express-rate-limit";
 import { changePassword, login, logout, me, registerAdmin, registerCommittee, registerVendor, updateProfile } from "../controllers/auth.controller.js";
 import { createFestival, deleteFestival, getFestival, listMyFestivals, publicFestivalById, updateFestival, validateFestId } from "../controllers/festival.controller.js";
 import { createDonor, deleteDonor, listDonors, updateDonor } from "../controllers/donor.controller.js";
-import { createExpense, deleteExpense, listExpenses, updateExpense } from "../controllers/expense.controller.js";
+import { createExpense, deleteExpense, downloadExpenseBill, listExpenses, updateExpense } from "../controllers/expense.controller.js";
 import { createEvent, deleteEvent, listEvents, updateEvent } from "../controllers/event.controller.js";
 import { decideRequest, listMembers, listRequests } from "../controllers/committee.controller.js";
 import { deleteGallery, downloadGallery, listGallery, uploadGallery } from "../controllers/gallery.controller.js";
-import { createNote, deleteNote, listNotes } from "../controllers/note.controller.js";
+import { createNote, deleteNote, downloadNoteAttachment, listNotes } from "../controllers/note.controller.js";
 import { addProduct, createAd, deleteAd, deleteProduct, getMyVendor, listAds, nearbyVendors, publicAds, updateAd, updateMyVendor, updateProduct, vendorFestivals, viewAd } from "../controllers/vendor.controller.js";
 import { analytics, financialAdvisor, forecast, landingStats, searchAll } from "../controllers/analytics.controller.js";
 import { createReceipt, downloadReport, listReceipts, publicDonorReceipt, publicFestivalReport, receiptPdf } from "../controllers/report.controller.js";
@@ -35,7 +35,7 @@ router.get("/public/festivals/:festId/validate", validateFestId);
 router.get("/public/vendors/nearby", nearbyVendors);
 router.get("/public/advertisements", publicAds);
 router.post("/public/advertisements/:id/view", viewAd);
-router.get("/gallery/:id/download", downloadGallery);
+router.get("/gallery/:id/download", requireAuth, requireRoles("ADMIN", "COMMITTEE"), downloadGallery);
 
 router.post("/auth/register/admin", authLimiter, registerAdmin);
 router.post("/auth/register/committee", authLimiter, registerCommittee);
@@ -70,6 +70,7 @@ router.get("/expenses", requireAuth, requireRoles("ADMIN", "COMMITTEE"), listExp
 router.post("/expenses", requireAuth, requireRoles("ADMIN"), billUpload.single("bill"), createExpense);
 router.patch("/expenses/:id", requireAuth, requireRoles("ADMIN"), billUpload.single("bill"), updateExpense);
 router.delete("/expenses/:id", requireAuth, requireRoles("ADMIN"), deleteExpense);
+router.get("/expenses/:id/bill", requireAuth, requireRoles("ADMIN", "COMMITTEE"), downloadExpenseBill);
 
 router.get("/events", requireAuth, requireRoles("ADMIN", "COMMITTEE"), listEvents);
 router.post("/events", requireAuth, requireRoles("ADMIN", "COMMITTEE"), imageUpload.single("image"), createEvent);
@@ -87,6 +88,7 @@ router.delete("/gallery/:id", requireAuth, requireRoles("ADMIN", "COMMITTEE"), d
 router.get("/notes", requireAuth, requireRoles("ADMIN", "COMMITTEE"), listNotes);
 router.post("/notes", requireAuth, requireRoles("ADMIN", "COMMITTEE"), billUpload.single("attachment"), createNote);
 router.delete("/notes/:id", requireAuth, requireRoles("ADMIN", "COMMITTEE"), deleteNote);
+router.get("/notes/:id/attachment", requireAuth, requireRoles("ADMIN", "COMMITTEE"), downloadNoteAttachment);
 
 router.get("/vendors/me", requireAuth, requireRoles("VENDOR"), getMyVendor);
 router.patch("/vendors/me", requireAuth, requireRoles("VENDOR"), imageUpload.fields([{ name: "logo", maxCount: 1 }, { name: "images", maxCount: 8 }]), updateMyVendor);

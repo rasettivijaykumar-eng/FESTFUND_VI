@@ -2,7 +2,7 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { parsePhoneNumber } from "libphonenumber-js";
 import twilio from "twilio";
 import type { Types } from "mongoose";
-import { Donor, WhatsAppSettings } from "../models/index.js";
+import { Donor, WhatsAppEvent, WhatsAppSettings } from "../models/index.js";
 import { env } from "../config/env.js";
 import { getOrCreateReceipt } from "./receipt.service.js";
 import { notify } from "./notification.service.js";
@@ -290,7 +290,7 @@ async function hasOpenServiceWindow(client: ReturnType<typeof twilio>, from: str
   return inbound.some((message) => message.dateSent && message.dateSent.getTime() >= cutoff);
 }
 
-async function saveNotification(donorId: Types.ObjectId, festId: string, result: SendResult) {
+async function saveNotification(donorId: Types.ObjectId, festId: string, result: SendResult, idempotencyKey = "", retryCount = 0) {
   const update: Record<string, unknown> = {
     "whatsappNotification.status": result.status,
     "whatsappNotification.recipient": result.recipient,
@@ -298,6 +298,8 @@ async function saveNotification(donorId: Types.ObjectId, festId: string, result:
     "whatsappNotification.sentAt": result.sentAt,
     "whatsappNotification.failureReason": result.failureReason,
     "whatsappNotification.lastAttemptAt": new Date(),
+    "whatsappNotification.idempotencyKey": idempotencyKey,
+    "whatsappNotification.retryCount": retryCount,
   };
   if (/^\+[1-9]\d{7,14}$/.test(result.recipient)) update.mobile = result.recipient;
   await Donor.updateOne({ _id: donorId, festId }, { $set: update });
@@ -329,7 +331,7 @@ export async function sendDonationReceipt(donor: DonationInput, festival: Festiv
   try {
     const receipt = await getOrCreateReceipt(donor, festival);
     const festivalLink = new URL(`/festival/${encodeURIComponent(festival.festId)}`, env.festfundPublicUrl).toString();
-    const result = await sendTemplateMessage({
+    let result = await sendTemplateMessage({
       donorName: donor.name,
       amount: donor.amount,
       festivalName: festival.name,
@@ -338,7 +340,23 @@ export async function sendDonationReceipt(donor: DonationInput, festival: Festiv
       festivalLink,
       recipient: parsedPhone.e164,
     });
-    await saveNotification(donor._id, festival.festId, result);
+    let retryCount = 0;
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const retryable = /timed out|HTTP 429|HTTP 5\d\d|Meta error 5\d\d|Twilio error 429|Twilio error 5\d\d/i.test(result.failureReason);
+      if (!retryable) break;
+      await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** (attempt - 1)));
+      retryCount = attempt;
+      result = await sendTemplateMessage({
+        donorName: donor.name,
+        amount: donor.amount,
+        festivalName: festival.name,
+        festId: festival.festId,
+        receiptNo: receipt.receiptNo,
+        festivalLink,
+        recipient: parsedPhone.e164,
+      });
+    }
+    await saveNotification(donor._id, festival.festId, result, receipt.receiptNo, retryCount);
     if (result.status === "failed" || result.status === "not_available") {
       await notify(adminId, "WhatsApp receipt failed", `Contribution ${receipt.receiptNo} was saved, but WhatsApp could not be confirmed. ${result.failureReason}`, "whatsapp", "/admin/donors");
     }
@@ -396,6 +414,12 @@ export async function verifyWhatsAppConfiguration() {
 }
 
 export function verifyWhatsAppWebhookSignature(rawBody: Buffer | undefined, signature: string | undefined, url?: string, params?: Record<string, unknown>) {
+  if (signature?.startsWith("sha256=") && env.whatsapp.appSecret && rawBody) {
+    const received = Buffer.from(signature.slice("sha256=".length), "hex");
+    const expected = createHmac("sha256", env.whatsapp.appSecret).update(rawBody).digest();
+    return received.length === expected.length && timingSafeEqual(received, expected);
+  }
+
   if (isTwilioConfigured()) {
     const token = env.whatsapp.twilioAuthToken || env.whatsapp.appSecret;
     if (!token) return false;
@@ -437,6 +461,40 @@ type WhatsAppWebhookPayload = {
   Timestamp?: string;
 };
 
+function isMonotonicProgression(current: WhatsAppStatus, next: WhatsAppStatus) {
+  const rank: Record<WhatsAppStatus, number> = {
+    pending: 0,
+    sent: 1,
+    delivered: 2,
+    read: 3,
+    failed: 4,
+    not_available: 4,
+    not_configured: -1,
+    no_number: -1,
+  };
+  if (current === "failed" || current === "not_available") return false;
+  if (next === "failed" || next === "not_available") return true;
+  return rank[next] >= rank[current];
+}
+
+function isReplayTimestamp(timestamp: Date) {
+  const ageMs = Date.now() - timestamp.getTime();
+  return ageMs > 24 * 60 * 60 * 1000 || ageMs < -5 * 60 * 1000;
+}
+
+async function claimWebhookEvent(eventId: string, messageId: string, eventType: string, provider: "meta" | "twilio", eventTimestamp?: Date) {
+  try {
+    return await WhatsAppEvent.findOneAndUpdate(
+      { eventId },
+      { $setOnInsert: { eventId, messageId, eventType, provider, eventTimestamp, processingStatus: "processing", receivedAt: new Date() } },
+      { upsert: true, new: true },
+    );
+  } catch (error) {
+    if ((error as { code?: number }).code === 11000) return null;
+    throw error;
+  }
+}
+
 export async function processWhatsAppWebhook(payload: unknown) {
   const body = payload as Record<string, any>;
   if (body?.entry && Array.isArray(body.entry)) {
@@ -446,6 +504,11 @@ export async function processWhatsAppWebhook(payload: unknown) {
         if (value?.metadata?.phone_number_id !== env.whatsapp.phoneNumberId) continue;
         for (const event of value?.statuses || []) {
           if (!event.id || !event.status) continue;
+          const timestamp = event.timestamp ? new Date(Number(event.timestamp) * 1000) : new Date();
+          if (isReplayTimestamp(timestamp)) continue;
+          const eventId = `${event.id}:${event.status}:${event.timestamp || timestamp.toISOString()}`;
+          const claimed = await claimWebhookEvent(eventId, event.id, event.status, "meta", timestamp);
+          if (!claimed) continue;
           const donor = await Donor.findOne({ "whatsappNotification.messageId": event.id });
           if (!donor) continue;
           const alreadyFailed = donor.whatsappNotification.status === "failed" || donor.whatsappNotification.status === "not_available";
@@ -459,7 +522,10 @@ export async function processWhatsAppWebhook(payload: unknown) {
                 : event.status === "failed" && code === 131026
                   ? "not_available"
                   : event.status === "failed" ? "failed" : "pending";
-          const timestamp = event.timestamp ? new Date(Number(event.timestamp) * 1000) : new Date();
+          if (!isMonotonicProgression(donor.whatsappNotification.status as WhatsAppStatus, status)) {
+            await WhatsAppEvent.updateOne({ eventId }, { $set: { processingStatus: "ignored", processingResult: "Out-of-order status ignored" } });
+            continue;
+          }
           donor.whatsappNotification.status = status;
           if (status === "sent" && !donor.whatsappNotification.sentAt) donor.whatsappNotification.sentAt = timestamp;
           if (status === "delivered") donor.whatsappNotification.deliveredAt = timestamp;
@@ -468,6 +534,7 @@ export async function processWhatsAppWebhook(payload: unknown) {
             ? `WhatsApp delivery failed${code ? ` (Meta error ${code})` : ""}${event.errors?.[0]?.title ? `: ${event.errors[0].title}` : ""}`.slice(0, 240)
             : "";
           await donor.save();
+          await WhatsAppEvent.updateOne({ eventId }, { $set: { processingStatus: "processed", processingResult: `Status updated to ${status}` } });
           if ((status === "failed" || status === "not_available") && !alreadyFailed) {
             const festival = await (await import("../models/index.js")).Festival.findOne({ festId: donor.festId }).select("createdBy");
             if (festival?.createdBy) {
@@ -492,13 +559,21 @@ export async function processWhatsAppWebhook(payload: unknown) {
   const errorMessage = body.ErrorMessage || "";
 
   if (!messageId || !statusValue) return;
+  const timestamp = body.Timestamp ? new Date(Number(body.Timestamp) * 1000) : new Date();
+  if (isReplayTimestamp(timestamp)) return;
+  const eventId = `${messageId}:${statusValue}:${body.Timestamp || timestamp.toISOString()}`;
+  const claimed = await claimWebhookEvent(eventId, messageId, statusValue, "twilio", timestamp);
+  if (!claimed) return;
   console.info(`[whatsapp] Twilio status callback sid=${messageId} status=${statusValue}${errorCode ? ` errorCode=${errorCode}` : ""}`);
   const donor = await Donor.findOne({ "whatsappNotification.messageId": messageId });
   if (!donor) return;
 
   const alreadyFailed = donor.whatsappNotification.status === "failed" || donor.whatsappNotification.status === "not_available";
   const mappedStatus = mapTwilioStatus(statusValue, errorCode);
-  const timestamp = body.Timestamp ? new Date(Number(body.Timestamp) * 1000) : new Date();
+  if (!isMonotonicProgression(donor.whatsappNotification.status as WhatsAppStatus, mappedStatus)) {
+    await WhatsAppEvent.updateOne({ eventId }, { $set: { processingStatus: "ignored", processingResult: "Out-of-order status ignored" } });
+    return;
+  }
 
   donor.whatsappNotification.status = mappedStatus;
   if (mappedStatus === "sent" && !donor.whatsappNotification.sentAt) donor.whatsappNotification.sentAt = timestamp;
@@ -508,6 +583,7 @@ export async function processWhatsAppWebhook(payload: unknown) {
     ? `Twilio delivery failed${errorCode ? ` (Twilio error ${errorCode})` : ""}${errorMessage ? `: ${errorMessage}` : ""}`.slice(0, 240)
     : "";
   await donor.save();
+  await WhatsAppEvent.updateOne({ eventId }, { $set: { processingStatus: "processed", processingResult: `Status updated to ${mappedStatus}` } });
 
   if ((mappedStatus === "failed" || mappedStatus === "not_available") && !alreadyFailed) {
     const festival = await (await import("../models/index.js")).Festival.findOne({ festId: donor.festId }).select("createdBy");

@@ -3,7 +3,7 @@ import { Donor } from "../models/index.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { escapeRegex } from "../utils/geo.js";
-import { loadFestivalForActor } from "../services/access.service.js";
+import { getFestivalOwnedRecord, loadFestivalForActor } from "../services/access.service.js";
 import { sendDonationReceipt } from "../services/whatsapp.service.js";
 import { notify } from "../services/notification.service.js";
 import { getOrCreateReceipt } from "../services/receipt.service.js";
@@ -105,9 +105,7 @@ export const createDonor = asyncHandler(async (req, res) => {
 });
 
 export const updateDonor = asyncHandler(async (req, res) => {
-  const donor = await Donor.findById(req.params.id);
-  if (!donor) throw new ApiError(404, "Donor record not found");
-  await loadFestivalForActor(req, donor.festId, "admin");
+  const donor = await getFestivalOwnedRecord(req, Donor, req.params.id, "admin");
   const parsed = schema.partial().safeParse(req.body);
   if (!parsed.success) throw new ApiError(400, parsed.error.issues[0]?.message || "Invalid input");
   const { festId: _festId, ...rest } = parsed.data;
@@ -117,9 +115,7 @@ export const updateDonor = asyncHandler(async (req, res) => {
 });
 
 export const deleteDonor = asyncHandler(async (req, res) => {
-  const donor = await Donor.findById(req.params.id);
-  if (!donor) throw new ApiError(404, "Donor record not found");
-  await loadFestivalForActor(req, donor.festId, "admin");
+  const donor = await getFestivalOwnedRecord(req, Donor, req.params.id, "admin");
   await donor.deleteOne();
   res.json({ success: true, message: "Donor record removed" });
 });

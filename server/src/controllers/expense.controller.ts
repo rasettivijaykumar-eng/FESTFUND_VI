@@ -3,8 +3,8 @@ import { EXPENSE_CATEGORIES, Expense } from "../models/index.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { escapeRegex } from "../utils/geo.js";
-import { loadFestivalForActor } from "../services/access.service.js";
-import { storeFile } from "../services/upload.service.js";
+import { getFestivalOwnedRecord, loadFestivalForActor } from "../services/access.service.js";
+import { downloadTarget, storeFile } from "../services/upload.service.js";
 import { reviewExpenseForAnomaly } from "../services/financialAdvisor.service.js";
 
 const schema = z.object({
@@ -71,9 +71,7 @@ export const createExpense = asyncHandler(async (req, res) => {
 });
 
 export const updateExpense = asyncHandler(async (req, res) => {
-  const expense = await Expense.findById(req.params.id);
-  if (!expense) throw new ApiError(404, "Expense not found");
-  await loadFestivalForActor(req, expense.festId, "admin");
+  const expense = await getFestivalOwnedRecord(req, Expense, req.params.id, "admin");
   const parsed = schema.partial().safeParse(req.body);
   if (!parsed.success) throw new ApiError(400, parsed.error.issues[0]?.message || "Invalid input");
   const { festId: _ignore, ...rest } = parsed.data;
@@ -89,9 +87,21 @@ export const updateExpense = asyncHandler(async (req, res) => {
 });
 
 export const deleteExpense = asyncHandler(async (req, res) => {
-  const expense = await Expense.findById(req.params.id);
-  if (!expense) throw new ApiError(404, "Expense not found");
-  await loadFestivalForActor(req, expense.festId, "admin");
+  const expense = await getFestivalOwnedRecord(req, Expense, req.params.id, "admin");
   await expense.deleteOne();
   res.json({ success: true, message: "Expense removed" });
+});
+
+export const downloadExpenseBill = asyncHandler(async (req, res) => {
+  const expense = await getFestivalOwnedRecord(req, Expense, req.params.id, "read");
+  if (!expense.billUrl) throw new ApiError(404, "Bill not found");
+  const target = downloadTarget(expense.billUrl);
+  res.setHeader("Cache-Control", "private, no-store");
+  if (target.startsWith("http")) {
+    res.redirect(target);
+    return;
+  }
+  const path = await import("node:path");
+  const file = path.resolve(process.cwd(), "uploads", expense.billPublicId || path.basename(expense.billUrl));
+  res.download(file, expense.billName || "festfund-expense-bill");
 });

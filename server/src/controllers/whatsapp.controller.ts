@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Donor, Festival, WhatsAppSettings } from "../models/index.js";
-import { loadFestivalForActor } from "../services/access.service.js";
+import { getFestivalOwnedRecord, loadFestivalForActor } from "../services/access.service.js";
 import {
   getWhatsAppConfigFingerprint,
   isWhatsAppReady,
@@ -80,8 +80,8 @@ export const resendDonationWhatsApp = asyncHandler(async (req, res) => {
   const parsed = z.object({ festId: z.string().min(4).max(80) }).safeParse(req.body);
   if (!parsed.success) throw new ApiError(400, "Fest ID is required");
   const festId = parsed.data.festId.trim().toUpperCase();
-  const donor = await Donor.findById(req.params.id);
-  if (!donor || donor.festId !== festId) throw new ApiError(404, "Donor record not found for this festival");
+  const donor = await getFestivalOwnedRecord(req, Donor, req.params.id, "admin");
+  if (donor.festId !== festId) throw new ApiError(404, "Donor record not found for this festival");
   const festival = await loadFestivalForActor(req, festId, "admin");
   if (String(donor.festival) !== String(festival._id)) throw new ApiError(404, "Donor record not found for this festival");
   if (["sent", "delivered", "read", "pending"].includes(donor.whatsappNotification?.status || "")) {
@@ -110,7 +110,9 @@ export const verifyWhatsAppWebhook = asyncHandler(async (req, res) => {
 });
 
 export const receiveWhatsAppWebhook = asyncHandler(async (req, res) => {
-  const signature = req.header("x-twilio-signature");
+  const metaSignature = req.header("x-hub-signature-256");
+  const twilioSignature = req.header("x-twilio-signature");
+  const signature = metaSignature || twilioSignature;
   const fullUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
   if (!verifyWhatsAppWebhookSignature(req.rawBody, signature, fullUrl, req.body || {})) {
     res.sendStatus(401);

@@ -2,8 +2,8 @@ import { z } from "zod";
 import { AdminNote, User } from "../models/index.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
-import { loadFestivalForActor } from "../services/access.service.js";
-import { storeFile } from "../services/upload.service.js";
+import { getFestivalOwnedRecord, loadFestivalForActor } from "../services/access.service.js";
+import { downloadTarget, storeFile } from "../services/upload.service.js";
 import { notify } from "../services/notification.service.js";
 
 const schema = z.object({
@@ -53,12 +53,24 @@ export const createNote = asyncHandler(async (req, res) => {
 });
 
 export const deleteNote = asyncHandler(async (req, res) => {
-  const note = await AdminNote.findById(req.params.id);
-  if (!note) throw new ApiError(404, "Note not found");
-  await loadFestivalForActor(req, note.festId, "manage");
+  const note = await getFestivalOwnedRecord(req, AdminNote, req.params.id, "manage");
   if (req.auth!.role === "COMMITTEE" && String(note.author) !== req.auth!.id) {
     throw new ApiError(403, "Unauthorized access");
   }
   await note.deleteOne();
   res.json({ success: true, message: "Note removed" });
+});
+
+export const downloadNoteAttachment = asyncHandler(async (req, res) => {
+  const note = await getFestivalOwnedRecord(req, AdminNote, req.params.id, "read");
+  if (!note.attachmentUrl) throw new ApiError(404, "Attachment not found");
+  const target = downloadTarget(note.attachmentUrl);
+  res.setHeader("Cache-Control", "private, no-store");
+  if (target.startsWith("http")) {
+    res.redirect(target);
+    return;
+  }
+  const path = await import("node:path");
+  const file = path.resolve(process.cwd(), "uploads", note.attachmentPublicId || path.basename(note.attachmentUrl));
+  res.download(file, note.attachmentName || "festfund-note-attachment");
 });

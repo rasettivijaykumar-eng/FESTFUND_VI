@@ -26,7 +26,6 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 400, standardHeaders: true, legacyHeaders: false }));
 app.use("/api", router);
 app.use((_req, res) => res.status(404).json({ success: false, message: "The requested resource was not found" }));

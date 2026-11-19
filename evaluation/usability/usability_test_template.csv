@@ -1,0 +1,6 @@
+participant_id,user_role,task_name,start_time,end_time,success,error_count,assistance_required,user_feedback,q1,q2,q3,q4,q5,q6,q7,q8,q9,q10
+P-001,committee,Record a festival contribution,,,,,,,,,,,,
+P-001,committee,Generate a contribution receipt,,,,,,,,,,,,
+P-001,committee,Add a festival expense,,,,,,,,,,,,
+P-001,committee,View and understand the financial advisor,,,,,,,,,,,,
+P-001,committee,Find nearby vendors,,,,,,,,,,,,

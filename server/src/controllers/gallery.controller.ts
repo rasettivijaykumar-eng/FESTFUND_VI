@@ -2,7 +2,7 @@ import { z } from "zod";
 import { GalleryItem, User } from "../models/index.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
-import { loadFestivalForActor } from "../services/access.service.js";
+import { getFestivalOwnedRecord, loadFestivalForActor } from "../services/access.service.js";
 import { downloadTarget, storeFile } from "../services/upload.service.js";
 import { notify } from "../services/notification.service.js";
 
@@ -57,17 +57,15 @@ export const uploadGallery = asyncHandler(async (req, res) => {
 });
 
 export const deleteGallery = asyncHandler(async (req, res) => {
-  const item = await GalleryItem.findById(req.params.id);
-  if (!item) throw new ApiError(404, "Gallery item not found");
-  await loadFestivalForActor(req, item.festId, "manage");
+  const item = await getFestivalOwnedRecord(req, GalleryItem, req.params.id, "manage");
   await item.deleteOne();
   res.json({ success: true, message: "Removed from gallery" });
 });
 
 export const downloadGallery = asyncHandler(async (req, res) => {
-  const item = await GalleryItem.findById(req.params.id);
-  if (!item) throw new ApiError(404, "Gallery item not found");
+  const item = await getFestivalOwnedRecord(req, GalleryItem, req.params.id, "read");
   const target = downloadTarget(item.url);
+  res.setHeader("Cache-Control", "private, no-store");
   if (target.startsWith("http")) {
     res.redirect(target);
     return;

@@ -1,0 +1,2 @@
+festival_id,date,contribution_amount,expense_amount,expense_category,festival_duration_days,final_contribution_total,final_expense_total,budget,data_source,permission_status
+ANON-FEST-001,2026-10-02,2500.00,0.00,General,10,25000.00,18000.00,20000.00,template-example-only,pending

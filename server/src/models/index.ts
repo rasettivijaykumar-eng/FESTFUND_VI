@@ -5,6 +5,7 @@ export { Festival } from "./Festival.js";
 export { CommitteeRequest } from "./CommitteeRequest.js";
 export { Donor } from "./Donor.js";
 export { WhatsAppSettings } from "./WhatsAppSettings.js";
+export { WhatsAppEvent } from "./WhatsAppEvent.js";
 export { Expense, EXPENSE_CATEGORIES } from "./Expense.js";
 export { Event } from "./Event.js";
 export { AdminNote } from "./AdminNote.js";

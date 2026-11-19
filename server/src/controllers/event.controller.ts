@@ -2,7 +2,7 @@ import { z } from "zod";
 import { Event } from "../models/index.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
-import { loadFestivalForActor } from "../services/access.service.js";
+import { getFestivalOwnedRecord, loadFestivalForActor } from "../services/access.service.js";
 import { storeFile } from "../services/upload.service.js";
 import { notify } from "../services/notification.service.js";
 import { User } from "../models/index.js";
@@ -64,9 +64,7 @@ export const createEvent = asyncHandler(async (req, res) => {
 });
 
 export const updateEvent = asyncHandler(async (req, res) => {
-  const event = await Event.findById(req.params.id);
-  if (!event) throw new ApiError(404, "Event not found");
-  await loadFestivalForActor(req, event.festId, "manage");
+  const event = await getFestivalOwnedRecord(req, Event, req.params.id, "manage");
   const parsed = schema.partial().safeParse(req.body);
   if (!parsed.success) throw new ApiError(400, parsed.error.issues[0]?.message || "Invalid input");
   const { festId: _ignore, ...rest } = parsed.data;
@@ -81,9 +79,7 @@ export const updateEvent = asyncHandler(async (req, res) => {
 });
 
 export const deleteEvent = asyncHandler(async (req, res) => {
-  const event = await Event.findById(req.params.id);
-  if (!event) throw new ApiError(404, "Event not found");
-  await loadFestivalForActor(req, event.festId, "manage");
+  const event = await getFestivalOwnedRecord(req, Event, req.params.id, "manage");
   await event.deleteOne();
   res.json({ success: true, message: "Event removed" });
 });

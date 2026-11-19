@@ -1,4 +1,5 @@
 import type { Request } from "express";
+import type { Model } from "mongoose";
 import { Festival } from "../models/index.js";
 import { ApiError } from "../utils/ApiError.js";
 
@@ -21,6 +22,44 @@ export async function loadFestivalForActor(req: Request, festId: string, write: 
   }
 
   throw new ApiError(403, "Unauthorized access");
+}
+
+export async function getFestivalOwnedRecord(
+  req: Request,
+  model: Model<any>,
+  recordId: string,
+  write: "read" | "manage" | "admin" = "read",
+) {
+  if (!req.auth) throw new ApiError(401, "Unauthorized access");
+
+  const festivalIds = await loadActorFestivalContext(req);
+  if (!festivalIds.length) throw new ApiError(404, "Record not found");
+
+  if (write === "admin" && req.auth.role !== "ADMIN") {
+    throw new ApiError(403, "Unauthorized access");
+  }
+  if (write === "manage" && req.auth.role === "VENDOR") {
+    throw new ApiError(403, "Unauthorized access");
+  }
+
+  const record = await model.findOne({ _id: recordId, festId: { $in: festivalIds } }).exec();
+  if (!record) throw new ApiError(404, "Record not found");
+  return record;
+}
+
+async function loadActorFestivalContext(req: Request) {
+  const auth = req.auth;
+  if (!auth) throw new ApiError(401, "Unauthorized access");
+
+  if (auth.role === "COMMITTEE") {
+    if (!auth.festId) throw new ApiError(403, "Unauthorized access");
+    return [auth.festId.toUpperCase()];
+  }
+
+  if (auth.role !== "ADMIN") throw new ApiError(403, "Unauthorized access");
+
+  const actorFestivals = await Festival.find({ createdBy: auth.id }).select("festId").lean().exec();
+  return actorFestivals.map((festival) => festival.festId);
 }
 
 export function publicFestival(festival: {
